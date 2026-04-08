@@ -1,0 +1,236 @@
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { query } from '../database.js';
+import { authenticate } from '../middleware/auth.js';
+import { analyzeProduct, generateTryOn, generateProductBG, generateCustomerTryOn, generateProductContent, upscaleImage } from '../services/geminiAgents.js';
+
+const router = express.Router();
+router.use(authenticate);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = `./uploads/${req.user.id}`;
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
+
+// Helper: check & deduct credits
+const useCredits = async (userId, amount) => {
+  const { rows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [userId]);
+  if (!rows.length || rows[0].balance < amount) throw new Error('Insufficient credits');
+  await query('UPDATE credits SET balance = balance - $1, total_used = total_used + $1, updated_at=NOW() WHERE owner_id=$2', [amount, userId]);
+  return true;
+};
+
+// Get credit costs for user's plan
+const getCreditCosts = async (userId) => {
+  const { rows } = await query('SELECT ps.credits_per_image, ps.tryon_credits, ps.upscale_credits FROM shops s JOIN plan_settings ps ON ps.plan_name = s.plan WHERE s.owner_id=$1', [userId]);
+  return rows[0] || { credits_per_image: 1, tryon_credits: 3, upscale_credits: 2 };
+};
+
+// List products
+router.get('/', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT p.*, COUNT(gi.id) as image_count
+      FROM products p
+      LEFT JOIN generated_images gi ON gi.product_id = p.id
+      WHERE p.owner_id = $1
+      GROUP BY p.id ORDER BY p.created_at DESC
+    `, [req.user.id]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create product
+router.post('/', upload.single('product_image'), async (req, res) => {
+  const { name, category, description, color, size_range, material, price, brand } = req.body;
+  if (!name || !req.file) return res.status(400).json({ error: 'Name and product image required' });
+  
+  try {
+    const imagePath = req.file.path;
+    const { rows } = await query(
+      'INSERT INTO products (owner_id, name, category, description, color, size_range, material, price, brand, original_image, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+      [req.user.id, name, category, description, color, size_range, material, price, brand, imagePath, 'ready']
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Generate images with model
+router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
+  const { angles, platform } = req.body;
+  const angleList = angles ? JSON.parse(angles) : ['front', 'back', 'left_side', 'right_side'];
+  
+  try {
+    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+    const product = products[0];
+    
+    if (!req.file) return res.status(400).json({ error: 'Model image required' });
+    
+    const costs = await getCreditCosts(req.user.id);
+    const totalCredits = angleList.length * costs.credits_per_image;
+    await useCredits(req.user.id, totalCredits);
+    
+    const results = [];
+    for (const angle of angleList) {
+      const result = await generateTryOn(req.file.path, product.original_image, product, angle);
+      if (result.success) {
+        const imageBuffer = Buffer.from(result.imageData, 'base64');
+        const outPath = `./uploads/${req.user.id}/gen_${uuidv4()}.jpg`;
+        fs.writeFileSync(outPath, imageBuffer);
+        
+        const { rows } = await query(
+          'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+          [product.id, req.user.id, 'tryon', angle, outPath, platform || 'general', costs.credits_per_image]
+        );
+        results.push(rows[0]);
+      }
+    }
+    
+    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', totalCredits, `Generated ${results.length} try-on images for "${product.name}"`]);
+    
+    res.json({ success: true, images: results, credits_used: totalCredits });
+  } catch (err) {
+    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+  }
+});
+
+// Generate without model (product BG)
+router.post('/:id/generate-bg', async (req, res) => {
+  const { bg_style } = req.body;
+  try {
+    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+    const product = products[0];
+    
+    const costs = await getCreditCosts(req.user.id);
+    await useCredits(req.user.id, costs.credits_per_image);
+    
+    const result = await generateProductBG(product.original_image, product, bg_style || 'studio');
+    if (!result.success) throw new Error('Image generation failed');
+    
+    const imageBuffer = Buffer.from(result.imageData, 'base64');
+    const outPath = `./uploads/${req.user.id}/bg_${uuidv4()}.jpg`;
+    fs.writeFileSync(outPath, imageBuffer);
+    
+    const { rows } = await query(
+      'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [product.id, req.user.id, 'bg_only', bg_style, outPath, costs.credits_per_image]
+    );
+    
+    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.credits_per_image, `BG generation for "${product.name}"`]);
+    
+    res.json({ success: true, image: rows[0] });
+  } catch (err) {
+    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+  }
+});
+
+// Analyze product
+router.post('/:id/analyze', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Product not found' });
+    const analysis = await analyzeProduct(rows[0].original_image, rows[0]);
+    res.json(analysis);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Upscale image
+router.post('/images/:imageId/upscale', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT gi.*, p.owner_id FROM generated_images gi JOIN products p ON p.id=gi.product_id WHERE gi.id=$1', [req.params.imageId]);
+    if (!rows.length) return res.status(404).json({ error: 'Image not found' });
+    const img = rows[0];
+    if (img.owner_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    
+    const costs = await getCreditCosts(req.user.id);
+    await useCredits(req.user.id, costs.upscale_credits);
+    
+    const imageBuffer = fs.readFileSync(img.image_url);
+    const upscaled = await upscaleImage(imageBuffer, 2400);
+    const outPath = img.image_url.replace('.jpg', '_upscaled.jpg');
+    fs.writeFileSync(outPath, upscaled);
+    
+    await query('UPDATE generated_images SET upscaled_url=$1, is_upscaled=true WHERE id=$2', [outPath, img.id]);
+    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.upscale_credits, 'Image upscale']);
+    
+    res.json({ success: true, upscaled_url: outPath });
+  } catch (err) {
+    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+  }
+});
+
+// Generate listing content
+router.post('/:id/listing-content', async (req, res) => {
+  const { platform } = req.body;
+  try {
+    const { rows } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Product not found' });
+    
+    const content = await generateProductContent(rows[0], platform || 'amazon');
+    
+    await query(
+      'INSERT INTO amazon_flipkart_content (product_id, platform, title, description, bullet_points, keywords, category_path) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
+      [rows[0].id, platform, content.title, content.description, JSON.stringify(content.bullet_points), content.keywords, content.category_path]
+    );
+    
+    res.json(content);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Get product images
+router.get('/:id/images', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM generated_images WHERE product_id=$1 ORDER BY created_at DESC', [req.params.id]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Customer try-on
+router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name: 'product_photo' }]), async (req, res) => {
+  try {
+    if (!req.files?.customer_photo || !req.files?.product_photo) return res.status(400).json({ error: 'Both photos required' });
+    
+    const costs = await getCreditCosts(req.user.id);
+    await useCredits(req.user.id, costs.tryon_credits);
+    
+    const { product_name, product_category, product_color } = req.body;
+    const productDetails = { name: product_name || 'Product', category: product_category || 'clothing', color: product_color };
+    
+    const results = await generateCustomerTryOn(
+      req.files.customer_photo[0].path,
+      req.files.product_photo[0].path,
+      productDetails
+    );
+    
+    const savedImages = [];
+    for (const r of results) {
+      const buf = Buffer.from(r.imageData, 'base64');
+      const outPath = `./uploads/${req.user.id}/ctryon_${uuidv4()}.jpg`;
+      fs.writeFileSync(outPath, buf);
+      savedImages.push({ angle: r.angle, url: outPath });
+    }
+    
+    const { rows } = await query(
+      'INSERT INTO customer_tryon (owner_id, customer_photo, product_photo, result_images, credits_used) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [req.user.id, req.files.customer_photo[0].path, req.files.product_photo[0].path, JSON.stringify(savedImages), costs.tryon_credits]
+    );
+    
+    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.tryon_credits, 'Customer try-on']);
+    
+    res.json({ success: true, images: savedImages, record: rows[0] });
+  } catch (err) {
+    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+  }
+});
+
+export default router;
