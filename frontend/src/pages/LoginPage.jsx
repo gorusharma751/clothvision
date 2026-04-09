@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Zap, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,12 +13,11 @@ export default function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
     setLoading(true);
     try {
       const user = await login(email, password);
-      toast.success(`Welcome back, ${user.name || user.email}!`);
       nav(user.role === 'admin' ? '/admin' : '/owner');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Login failed');
@@ -26,54 +25,46 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-cv-bg flex items-center justify-center relative overflow-hidden">
-      {/* Animated orbs */}
-      <div className="orb absolute top-20 left-20 w-96 h-96 rounded-full opacity-10" style={{background:'radial-gradient(circle, #7c3aed, transparent)'}} />
-      <div className="orb2 absolute bottom-20 right-20 w-80 h-80 rounded-full opacity-10" style={{background:'radial-gradient(circle, #f0b429, transparent)'}} />
-      <div className="orb3 absolute top-1/2 left-1/2 w-64 h-64 rounded-full opacity-5" style={{background:'radial-gradient(circle, #a78bfa, transparent)'}} />
+    <div style={{minHeight:'100vh',background:'#0a0a0f',display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+      {/* Orbs */}
+      <div className="orb" style={{position:'absolute',top:'10%',left:'5%',width:400,height:400,background:'radial-gradient(circle,rgba(124,58,237,0.2),transparent)',pointerEvents:'none'}}/>
+      <div className="orb" style={{position:'absolute',bottom:'10%',right:'5%',width:300,height:300,background:'radial-gradient(circle,rgba(240,180,41,0.15),transparent)',animationDelay:'3s',pointerEvents:'none'}}/>
+      {/* Grid */}
+      <div style={{position:'absolute',inset:0,backgroundImage:'linear-gradient(rgba(124,58,237,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(124,58,237,0.06) 1px,transparent 1px)',backgroundSize:'60px 60px',pointerEvents:'none'}}/>
 
-      {/* Grid pattern */}
-      <div className="absolute inset-0 opacity-5" style={{backgroundImage:'linear-gradient(rgba(124,58,237,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.3) 1px, transparent 1px)', backgroundSize:'50px 50px'}} />
-
-      <motion.div initial={{opacity:0, y:40, scale:0.95}} animate={{opacity:1, y:0, scale:1}} transition={{duration:0.6, ease:'easeOut'}}
-        className="w-full max-w-md mx-4">
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <motion.div initial={{scale:0}} animate={{scale:1}} transition={{delay:0.2, type:'spring', stiffness:200}}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 relative"
-            style={{background:'linear-gradient(135deg, #7c3aed, #4c1d95)'}}>
-            <Sparkles size={36} className="text-white" />
-            <div className="absolute inset-0 rounded-2xl animate-glow-pulse" />
+      <motion.div initial={{opacity:0,y:30}} animate={{opacity:1,y:0}} transition={{duration:0.5}}
+        style={{width:'100%',maxWidth:420,margin:'0 1rem'}}>
+        <div style={{textAlign:'center',marginBottom:'2rem'}}>
+          <motion.div initial={{scale:0}} animate={{scale:1}} transition={{delay:0.2,type:'spring'}}
+            style={{width:72,height:72,background:'linear-gradient(135deg,#7c3aed,#4c1d95)',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 0 40px rgba(124,58,237,0.4)'}}>
+            <Sparkles size={32} color="white"/>
           </motion.div>
-          <h1 className="font-display text-4xl font-bold mb-1">
-            <span className="shimmer-text">ClothVision</span>
-          </h1>
-          <p className="text-purple-400/60 text-sm tracking-widest font-display">AI FASHION STUDIO</p>
+          <h1 style={{fontFamily:'Syne,sans-serif',fontSize:'2rem',fontWeight:800,marginBottom:4}} className="shimmer-text">ClothVision AI</h1>
+          <p style={{color:'#6b6b8a',fontSize:'0.8rem',letterSpacing:'0.12em'}}>FASHION PHOTOGRAPHY STUDIO</p>
         </div>
 
-        {/* Card */}
-        <div className="glass rounded-2xl p-8 neon-border">
-          <h2 className="font-display text-xl font-semibold mb-6 text-white">Sign In</h2>
-          <form onSubmit={handleLogin} className="space-y-4">
+        <div className="glass" style={{borderRadius:20,padding:'2rem'}}>
+          <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1.25rem',marginBottom:'1.5rem',color:'#fff'}}>Sign In</h2>
+          <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
             <div>
-              <label className="block text-xs text-purple-300 mb-1.5 font-display tracking-wider">EMAIL</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required className="input-field" />
+              <label className="label">Email</label>
+              <input className="input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@clothvision.com" required/>
             </div>
             <div>
-              <label className="block text-xs text-purple-300 mb-1.5 font-display tracking-wider">PASSWORD</label>
-              <div className="relative">
-                <input type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required className="input-field pr-11" />
-                <button type="button" onClick={()=>setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-400 hover:text-purple-300">
-                  {show ? <EyeOff size={16}/> : <Eye size={16}/>}
+              <label className="label">Password</label>
+              <div style={{position:'relative'}}>
+                <input className="input" type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required style={{paddingRight:'2.5rem'}}/>
+                <button type="button" onClick={()=>setShow(!show)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#6b6b8a'}}>
+                  {show?<EyeOff size={16}/>:<Eye size={16}/>}
                 </button>
               </div>
             </div>
-            <motion.button type="submit" disabled={loading} whileHover={{scale:1.02}} whileTap={{scale:0.98}}
-              className="btn-primary w-full flex items-center justify-center gap-2 h-11 mt-2">
-              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Zap size={16}/> Sign In</>}
+            <motion.button type="submit" disabled={loading} whileHover={{scale:1.02}} whileTap={{scale:0.97}}
+              className="btn btn-purple" style={{width:'100%',justifyContent:'center',height:44,fontSize:'0.95rem',marginTop:4}}>
+              {loading ? <div style={{width:18,height:18,border:'2px solid #ffffff55',borderTopColor:'#fff',borderRadius:'50%'}} className="spin"/> : <><Zap size={16}/>Sign In</>}
             </motion.button>
           </form>
-          <p className="text-center text-xs text-purple-400/40 mt-6">ClothVision AI — Powered by Gemini</p>
+          <p style={{textAlign:'center',fontSize:'0.7rem',color:'#6b6b8a',marginTop:'1.5rem'}}>Powered by Gemini AI</p>
         </div>
       </motion.div>
     </div>

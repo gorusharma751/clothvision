@@ -1,125 +1,98 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Coins, Plus, Clock, CheckCircle, XCircle, TrendingDown, TrendingUp } from 'lucide-react';
+import { Coins, Plus, TrendingDown, TrendingUp, Clock, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import Modal from '../../components/shared/Modal';
 import api from '../../utils/api';
 
 export default function OwnerCredits() {
-  const [balance, setBalance] = useState({ balance: 0, total_used: 0 });
+  const [balance, setBalance] = useState({balance:0,total_used:0});
   const [history, setHistory] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [showRequest, setShowRequest] = useState(false);
+  const [showReq, setShowReq] = useState(false);
   const [amount, setAmount] = useState('');
   const [message, setMessage] = useState('');
-
   const load = () => {
-    api.get('/credits/balance').then(r => setBalance(r.data));
-    api.get('/credits/history').then(r => setHistory(r.data));
-    api.get('/credits/my-requests').then(r => setRequests(r.data));
+    api.get('/credits/balance').then(r=>setBalance(r.data)).catch(()=>{});
+    api.get('/credits/history').then(r=>setHistory(r.data)).catch(()=>{});
+    api.get('/credits/my-requests').then(r=>setRequests(r.data)).catch(()=>{});
   };
-  useEffect(() => { load(); }, []);
-
-  const handleRequest = async e => {
+  useEffect(()=>{load();},[]);
+  const handleReq = async e => {
     e.preventDefault();
     if (!amount) return;
-    try {
-      await api.post('/credits/request', { amount_requested: parseInt(amount), message });
-      toast.success('Request sent to admin!');
-      setShowRequest(false); setAmount(''); setMessage(''); load();
-    } catch { toast.error('Error sending request'); }
+    try { await api.post('/credits/request',{amount_requested:parseInt(amount),message}); toast.success('Request sent!'); setShowReq(false); setAmount(''); setMessage(''); load(); }
+    catch { toast.error('Error'); }
   };
-
-  const statusIcon = s => s==='approved' ? <CheckCircle size={13} className="text-green-400"/> : s==='rejected' ? <XCircle size={13} className="text-red-400"/> : <Clock size={13} className="text-gold-400"/>;
-
+  const statusIcon = s => s==='approved'?<CheckCircle size={13} color="#4ade80"/>:s==='rejected'?<XCircle size={13} color="#f87171"/>:<Clock size={13} color="#f0b429"/>;
   return (
-    <Layout title="Credits" subtitle="Manage your AI generation credits"
-      actions={<button onClick={()=>setShowRequest(true)} className="btn-gold flex items-center gap-2"><Plus size={16}/>Request Credits</button>}>
-
-      {/* Balance */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <motion.div initial={{opacity:0,scale:0.9}} animate={{opacity:1,scale:1}}
-          className="rounded-2xl p-6 text-center" style={{background:'linear-gradient(135deg, rgba(240,180,41,0.12), rgba(240,180,41,0.04))', border:'1px solid rgba(240,180,41,0.25)'}}>
-          <Coins size={28} className="mx-auto mb-2 text-gold-400"/>
-          <p className="text-4xl font-bold font-display text-gold-400 mb-1">{balance.balance}</p>
-          <p className="text-xs text-gold-400/60">Available Credits</p>
-        </motion.div>
-        <motion.div initial={{opacity:0,scale:0.9}} animate={{opacity:1,scale:1}} transition={{delay:0.1}}
-          className="rounded-2xl p-6 text-center" style={{background:'rgba(124,58,237,0.06)', border:'1px solid rgba(124,58,237,0.15)'}}>
-          <TrendingDown size={28} className="mx-auto mb-2 text-purple-400"/>
-          <p className="text-4xl font-bold font-display text-purple-300 mb-1">{balance.total_used}</p>
-          <p className="text-xs text-purple-400/60">Total Used</p>
-        </motion.div>
+    <Layout title="Credits" subtitle="AI generation credits"
+      actions={<button onClick={()=>setShowReq(true)} className="btn-gold"><Plus size={14}/>Request Credits</button>}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,marginBottom:24}}>
+        <div style={{background:'rgba(240,180,41,.06)',border:'1px solid rgba(240,180,41,.2)',borderRadius:16,padding:'1.5rem',textAlign:'center'}}>
+          <Coins size={28} color="#f0b429" style={{margin:'0 auto 8px'}}/>
+          <p style={{fontSize:'2.2rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#f0b429'}}>{balance.balance}</p>
+          <p style={{fontSize:12,color:'rgba(240,180,41,.5)'}}>Available Credits</p>
+        </div>
+        <div style={{background:'rgba(124,58,237,.06)',border:'1px solid rgba(124,58,237,.15)',borderRadius:16,padding:'1.5rem',textAlign:'center'}}>
+          <TrendingDown size={28} color="#a78bfa" style={{margin:'0 auto 8px'}}/>
+          <p style={{fontSize:'2.2rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#a78bfa'}}>{balance.total_used}</p>
+          <p style={{fontSize:12,color:'rgba(162,140,250,.4)'}}>Total Used</p>
+        </div>
       </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* My requests */}
-        <div className="rounded-2xl p-5" style={{background:'#111118', border:'1px solid #1e1e2d'}}>
-          <h3 className="font-display font-semibold text-white mb-4">My Requests</h3>
-          {requests.length === 0 ? (
-            <div className="text-center py-8 text-purple-400/40 text-sm">No requests yet</div>
-          ) : (
-            <div className="space-y-2">
-              {requests.map(r => (
-                <div key={r.id} className="flex items-center justify-between p-3 rounded-xl" style={{background:'rgba(124,58,237,0.04)', border:'1px solid rgba(124,58,237,0.08)'}}>
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-0.5">{statusIcon(r.status)}<span className="text-sm font-bold text-white">+{r.amount_requested}</span></div>
-                    {r.message && <p className="text-xs text-purple-400/50">{r.message}</p>}
-                    {r.admin_note && <p className="text-xs text-green-400/70 mt-0.5">Admin: {r.admin_note}</p>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:16}}>
+        <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20}}>
+          <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',marginBottom:14,fontSize:'.95rem'}}>My Requests</h3>
+          {requests.length===0?<p style={{color:'rgba(162,140,250,.3)',fontSize:13,textAlign:'center',padding:'20px 0'}}>No requests yet</p>:(
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {requests.map(r=>(
+                <div key={r.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderRadius:10,background:'rgba(124,58,237,.04)',border:'1px solid rgba(124,58,237,.08)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    {statusIcon(r.status)}
+                    <div><p style={{fontSize:13,fontWeight:600,color:'#fff'}}>+{r.amount_requested}</p>{r.message&&<p style={{fontSize:11,color:'rgba(162,140,250,.4)'}}>{r.message}</p>}</div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full capitalize ${r.status==='approved'?'text-green-400 bg-green-500/10':r.status==='rejected'?'text-red-400 bg-red-500/10':'text-gold-400 bg-yellow-500/10'}`}>{r.status}</span>
+                  <span style={{fontSize:11,padding:'3px 8px',borderRadius:10,fontWeight:600,background:r.status==='approved'?'rgba(34,197,94,.1)':r.status==='rejected'?'rgba(239,68,68,.1)':'rgba(240,180,41,.1)',color:r.status==='approved'?'#4ade80':r.status==='rejected'?'#f87171':'#f0b429'}}>{r.status}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
-
-        {/* History */}
-        <div className="rounded-2xl p-5" style={{background:'#111118', border:'1px solid #1e1e2d'}}>
-          <h3 className="font-display font-semibold text-white mb-4">Transaction History</h3>
-          {history.length === 0 ? (
-            <div className="text-center py-8 text-purple-400/40 text-sm">No transactions yet</div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {history.map(h => (
-                <div key={h.id} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${h.type==='add' ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                      {h.type==='add' ? <TrendingUp size={13} className="text-green-400"/> : <TrendingDown size={13} className="text-red-400"/>}
+        <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20}}>
+          <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',marginBottom:14,fontSize:'.95rem'}}>Transaction History</h3>
+          {history.length===0?<p style={{color:'rgba(162,140,250,.3)',fontSize:13,textAlign:'center',padding:'20px 0'}}>No transactions</p>:(
+            <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
+              {history.map(h=>(
+                <div key={h.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:8,transition:'background .2s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.02)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:28,height:28,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',background:h.type==='add'?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'}}>
+                      {h.type==='add'?<TrendingUp size={13} color="#4ade80"/>:<TrendingDown size={13} color="#f87171"/>}
                     </div>
-                    <div>
-                      <p className="text-xs text-white">{h.description}</p>
-                      <p className="text-xs text-purple-400/40">{new Date(h.created_at).toLocaleDateString()}</p>
-                    </div>
+                    <div><p style={{fontSize:12,color:'rgba(226,226,240,.8)'}}>{h.description}</p><p style={{fontSize:10,color:'rgba(162,140,250,.35)'}}>{new Date(h.created_at).toLocaleDateString()}</p></div>
                   </div>
-                  <span className={`text-sm font-bold font-display ${h.type==='add' ? 'text-green-400' : 'text-red-400'}`}>
-                    {h.type==='add' ? '+' : '-'}{Math.abs(h.amount)}
-                  </span>
+                  <span style={{fontSize:13,fontWeight:700,fontFamily:'Syne,sans-serif',color:h.type==='add'?'#4ade80':'#f87171'}}>{h.type==='add'?'+':'-'}{Math.abs(h.amount)}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
-
-      <Modal open={showRequest} onClose={()=>setShowRequest(false)} title="Request Credits from Admin">
-        <form onSubmit={handleRequest} className="space-y-4">
-          <div className="p-3 rounded-xl text-center" style={{background:'rgba(240,180,41,0.06)', border:'1px solid rgba(240,180,41,0.15)'}}>
-            <p className="text-xs text-gold-400/60 mb-1">Current Balance</p>
-            <p className="text-3xl font-bold font-display text-gold-400">{balance.balance}</p>
+      <Modal open={showReq} onClose={()=>setShowReq(false)} title="Request Credits">
+        <form onSubmit={handleReq} style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div style={{textAlign:'center',padding:'12px',borderRadius:12,background:'rgba(240,180,41,.06)',border:'1px solid rgba(240,180,41,.15)'}}>
+            <p style={{fontSize:12,color:'rgba(240,180,41,.5)',marginBottom:4}}>Current Balance</p>
+            <p style={{fontSize:'2rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#f0b429'}}>{balance.balance}</p>
           </div>
           <div>
-            <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">CREDITS NEEDED *</label>
-            <input className="input-field" type="number" min="1" value={amount} onChange={e=>setAmount(e.target.value)} required placeholder="e.g. 100"/>
+            <label style={{fontSize:11,color:'rgba(162,140,250,.5)',display:'block',marginBottom:6,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>CREDITS NEEDED *</label>
+            <input className="cv-input" type="number" min="1" value={amount} onChange={e=>setAmount(e.target.value)} required placeholder="e.g. 100"/>
           </div>
           <div>
-            <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">MESSAGE TO ADMIN</label>
-            <textarea className="input-field resize-none" rows={3} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Tell admin why you need credits..."/>
+            <label style={{fontSize:11,color:'rgba(162,140,250,.5)',display:'block',marginBottom:6,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>MESSAGE TO ADMIN</label>
+            <textarea className="cv-input" rows={3} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Why do you need credits..." style={{resize:'none'}}/>
           </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={()=>setShowRequest(false)} className="flex-1 py-2.5 rounded-xl border text-purple-400 text-sm hover:bg-white/5" style={{borderColor:'rgba(124,58,237,0.2)'}}>Cancel</button>
-            <button type="submit" className="flex-1 btn-gold">Send Request</button>
+          <div style={{display:'flex',gap:8}}>
+            <button type="button" onClick={()=>setShowReq(false)} className="btn-ghost" style={{flex:1}}>Cancel</button>
+            <button type="submit" className="btn-gold" style={{flex:1}}>Send Request</button>
           </div>
         </form>
       </Modal>

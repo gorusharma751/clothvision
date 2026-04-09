@@ -234,3 +234,11 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
 });
 
 export default router;
+
+// Delete product
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    await query('DELETE FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});

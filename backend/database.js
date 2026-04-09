@@ -12,12 +12,9 @@ const pool = new Pool({
 export const query = (text, params) => pool.query(text, params);
 
 export const initDB = async () => {
-  let client;
+  const client = await pool.connect();
   try {
-    client = await pool.connect();
     await client.query(`
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -146,9 +143,8 @@ export const initDB = async () => {
     console.log('✅ Database initialized');
   } catch (err) {
     console.error('DB init error:', err.message);
-    throw err;
   } finally {
-    client?.release();
+    client.release();
   }
 };
 

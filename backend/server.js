@@ -51,19 +51,10 @@ const createAdmin = async () => {
 };
 
 const PORT = process.env.PORT || 5000;
-const startServer = async () => {
-  try {
-    await initDB();
-    await createAdmin();
-    app.listen(PORT, () => {
-      console.log(`🚀 ClothVision API running on port ${PORT}`);
-    });
-  } catch (err) {
-    console.error('❌ Server startup failed. Check PostgreSQL service and DATABASE_URL.');
-    process.exit(1);
-  }
-};
-
-startServer();
+app.listen(PORT, async () => {
+  console.log(`🚀 ClothVision API running on port ${PORT}`);
+  await initDB();
+  await createAdmin();
+});
 
 export default app;
