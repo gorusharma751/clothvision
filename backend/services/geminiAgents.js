@@ -2,7 +2,57 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 
-const getClient = () => new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const getApiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const getTextModelName = () => process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
+const getImageModelName = () => process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+
+const getClient = () => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const err = new Error('Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY).');
+    err.code = 'GEMINI_KEY_MISSING';
+    throw err;
+  }
+  return new GoogleGenerativeAI(apiKey);
+};
+
+const normalizeGeminiError = (error) => {
+  const raw = error?.message || String(error || 'Gemini request failed');
+
+  if (/API_KEY_INVALID|API key not valid|Please pass a valid API key|invalid api key/i.test(raw)) {
+    const err = new Error('Gemini API key is invalid. Use a valid key from Google AI Studio.');
+    err.code = 'GEMINI_KEY_INVALID';
+    return err;
+  }
+
+  if (/429 Too Many Requests|Quota exceeded|rate-limits|limit:\s*0/i.test(raw)) {
+    const err = new Error('Gemini quota exceeded. Enable billing or use a project with active quota, then retry.');
+    err.code = 'GEMINI_QUOTA_EXCEEDED';
+    return err;
+  }
+
+  if (/404 Not Found|is not found for API version|not supported for generateContent/i.test(raw)) {
+    const err = new Error('Configured Gemini model is unavailable for this API key. Update GEMINI_TEXT_MODEL/GEMINI_IMAGE_MODEL.');
+    err.code = 'GEMINI_MODEL_UNAVAILABLE';
+    return err;
+  }
+
+  if (/403 Forbidden|PERMISSION_DENIED|has not been used in project|billing account|SERVICE_DISABLED/i.test(raw)) {
+    const err = new Error('Gemini API is not permitted for this project/key. Enable Generative Language API and billing, then retry.');
+    err.code = 'GEMINI_PERMISSION_DENIED';
+    return err;
+  }
+
+  if (/400 Bad Request/i.test(raw)) {
+    const err = new Error(`Gemini request rejected (400). Check model/input format and API restrictions. Raw: ${raw}`);
+    err.code = 'GEMINI_BAD_REQUEST';
+    return err;
+  }
+
+  const err = new Error(`Gemini request failed: ${raw}`);
+  err.code = 'GEMINI_REQUEST_FAILED';
+  return err;
+};
 
 const fileToBase64 = (filePath) => {
   const data = fs.readFileSync(filePath);
@@ -18,7 +68,7 @@ const getMimeType = (filePath) => {
 // Agent 1: Product Analyzer
 export const analyzeProduct = async (productImagePath, productDetails) => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
   
   const imageData = fileToBase64(productImagePath);
   const mimeType = getMimeType(productImagePath);
@@ -45,10 +95,15 @@ Provide analysis in JSON format:
 
 Return ONLY valid JSON, no markdown.`;
 
-  const result = await model.generateContent([
-    { inlineData: { data: imageData, mimeType } },
-    prompt
-  ]);
+  let result;
+  try {
+    result = await model.generateContent([
+      { inlineData: { data: imageData, mimeType } },
+      prompt
+    ]);
+  } catch (error) {
+    throw normalizeGeminiError(error);
+  }
   
   try {
     const text = result.response.text().replace(/```json|```/g, '').trim();
@@ -68,7 +123,7 @@ Return ONLY valid JSON, no markdown.`;
 // Agent 2: Try-On Generator (model wearing product)
 export const generateTryOn = async (modelImagePath, productImagePath, productDetails, angle = 'front') => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
   const modelImageData = fileToBase64(modelImagePath);
   const productImageData = fileToBase64(productImagePath);
@@ -99,11 +154,16 @@ Product details: ${productDetails.name}, ${productDetails.color || ''}, ${produc
 
 Generate a high-quality, realistic fashion photography image showing the model wearing this exact product from the ${angle} angle.`;
 
-  const result = await model.generateContent([
-    { inlineData: { data: modelImageData, mimeType: modelMime } },
-    { inlineData: { data: productImageData, mimeType: productMime } },
-    prompt
-  ]);
+  let result;
+  try {
+    result = await model.generateContent([
+      { inlineData: { data: modelImageData, mimeType: modelMime } },
+      { inlineData: { data: productImageData, mimeType: productMime } },
+      prompt
+    ]);
+  } catch (error) {
+    throw normalizeGeminiError(error);
+  }
 
   const response = result.response;
   for (const part of response.candidates[0].content.parts) {
@@ -123,7 +183,7 @@ Generate a high-quality, realistic fashion photography image showing the model w
 // Agent 3: Background Generator (no model)
 export const generateProductBG = async (productImagePath, productDetails, bgStyle = 'studio') => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
   const imageData = fileToBase64(productImagePath);
   const mimeType = getMimeType(productImagePath);
@@ -150,10 +210,15 @@ Requirements:
 
 Generate a professional e-commerce product photo.`;
 
-  const result = await model.generateContent([
-    { inlineData: { data: imageData, mimeType } },
-    prompt
-  ]);
+  let result;
+  try {
+    result = await model.generateContent([
+      { inlineData: { data: imageData, mimeType } },
+      prompt
+    ]);
+  } catch (error) {
+    throw normalizeGeminiError(error);
+  }
 
   const response = result.response;
   for (const part of response.candidates[0].content.parts) {
@@ -172,7 +237,7 @@ Generate a professional e-commerce product photo.`;
 // Agent 4: Customer Try-On
 export const generateCustomerTryOn = async (customerImagePath, productImagePath, productDetails) => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
   const customerData = fileToBase64(customerImagePath);
   const productData = fileToBase64(productImagePath);
@@ -212,8 +277,12 @@ This is for a virtual try-on feature for a clothing store.`;
           });
         }
       }
-    } catch (err) {
+    } catch (error) {
+      const err = normalizeGeminiError(error);
       console.error(`Error generating ${angle}:`, err.message);
+      if (['GEMINI_QUOTA_EXCEEDED', 'GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_MODEL_UNAVAILABLE'].includes(err.code)) {
+        throw err;
+      }
     }
   }
 
@@ -223,7 +292,7 @@ This is for a virtual try-on feature for a clothing store.`;
 // Agent 5: Amazon/Flipkart Content Generator
 export const generateProductContent = async (productDetails, platform = 'amazon') => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
 
   const platformSpecs = {
     amazon: {
@@ -272,7 +341,12 @@ Generate complete listing content in JSON format:
 
 Return ONLY valid JSON.`;
 
-  const result = await model.generateContent(prompt);
+  let result;
+  try {
+    result = await model.generateContent(prompt);
+  } catch (error) {
+    throw normalizeGeminiError(error);
+  }
   
   try {
     const text = result.response.text().replace(/```json|```/g, '').trim();

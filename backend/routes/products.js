@@ -28,6 +28,19 @@ const useCredits = async (userId, amount) => {
   return true;
 };
 
+const ensureCreditsAvailable = async (userId, amount) => {
+  const { rows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [userId]);
+  if (!rows.length || rows[0].balance < amount) throw new Error('Insufficient credits');
+  return true;
+};
+
+const getErrorStatusCode = (err) => {
+  if (err.message === 'Insufficient credits') return 402;
+  if (err.code === 'GEMINI_QUOTA_EXCEEDED') return 503;
+  if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST'].includes(err.code)) return 502;
+  return 500;
+};
+
 // Get credit costs for user's plan
 const getCreditCosts = async (userId) => {
   const { rows } = await query('SELECT ps.credits_per_image, ps.tryon_credits, ps.upscale_credits FROM shops s JOIN plan_settings ps ON ps.plan_name = s.plan WHERE s.owner_id=$1', [userId]);
@@ -77,29 +90,42 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     
     const costs = await getCreditCosts(req.user.id);
     const totalCredits = angleList.length * costs.credits_per_image;
-    await useCredits(req.user.id, totalCredits);
+    await ensureCreditsAvailable(req.user.id, totalCredits);
     
     const results = [];
+    const generationErrors = [];
     for (const angle of angleList) {
-      const result = await generateTryOn(req.file.path, product.original_image, product, angle);
-      if (result.success) {
-        const imageBuffer = Buffer.from(result.imageData, 'base64');
-        const outPath = `./uploads/${req.user.id}/gen_${uuidv4()}.jpg`;
-        fs.writeFileSync(outPath, imageBuffer);
-        
-        const { rows } = await query(
-          'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-          [product.id, req.user.id, 'tryon', angle, outPath, platform || 'general', costs.credits_per_image]
-        );
-        results.push(rows[0]);
+      try {
+        const result = await generateTryOn(req.file.path, product.original_image, product, angle);
+        if (result.success) {
+          const imageBuffer = Buffer.from(result.imageData, 'base64');
+          const outPath = `./uploads/${req.user.id}/gen_${uuidv4()}.jpg`;
+          fs.writeFileSync(outPath, imageBuffer);
+
+          const { rows } = await query(
+            'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+            [product.id, req.user.id, 'tryon', angle, outPath, platform || 'general', costs.credits_per_image]
+          );
+          results.push(rows[0]);
+        } else {
+          generationErrors.push(`${angle}: ${result.error || 'No image generated'}`);
+        }
+      } catch (err) {
+        if (!results.length && err.code) throw err;
+        generationErrors.push(`${angle}: ${err.message}`);
       }
     }
+
+    if (!results.length) throw new Error(generationErrors[0] || 'Image generation failed');
+
+    const actualCredits = results.length * costs.credits_per_image;
+    await useCredits(req.user.id, actualCredits);
     
-    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', totalCredits, `Generated ${results.length} try-on images for "${product.name}"`]);
+    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', actualCredits, `Generated ${results.length} try-on images for "${product.name}"`]);
     
-    res.json({ success: true, images: results, credits_used: totalCredits });
+    res.json({ success: true, images: results, credits_used: actualCredits, generation_errors: generationErrors });
   } catch (err) {
-    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });
 
@@ -112,10 +138,12 @@ router.post('/:id/generate-bg', async (req, res) => {
     const product = products[0];
     
     const costs = await getCreditCosts(req.user.id);
-    await useCredits(req.user.id, costs.credits_per_image);
+    await ensureCreditsAvailable(req.user.id, costs.credits_per_image);
     
     const result = await generateProductBG(product.original_image, product, bg_style || 'studio');
     if (!result.success) throw new Error('Image generation failed');
+
+    await useCredits(req.user.id, costs.credits_per_image);
     
     const imageBuffer = Buffer.from(result.imageData, 'base64');
     const outPath = `./uploads/${req.user.id}/bg_${uuidv4()}.jpg`;
@@ -130,7 +158,7 @@ router.post('/:id/generate-bg', async (req, res) => {
     
     res.json({ success: true, image: rows[0] });
   } catch (err) {
-    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });
 
@@ -153,19 +181,21 @@ router.post('/images/:imageId/upscale', async (req, res) => {
     if (img.owner_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
     
     const costs = await getCreditCosts(req.user.id);
-    await useCredits(req.user.id, costs.upscale_credits);
+    await ensureCreditsAvailable(req.user.id, costs.upscale_credits);
     
     const imageBuffer = fs.readFileSync(img.image_url);
     const upscaled = await upscaleImage(imageBuffer, 2400);
     const outPath = img.image_url.replace('.jpg', '_upscaled.jpg');
     fs.writeFileSync(outPath, upscaled);
+
+    await useCredits(req.user.id, costs.upscale_credits);
     
     await query('UPDATE generated_images SET upscaled_url=$1, is_upscaled=true WHERE id=$2', [outPath, img.id]);
     await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.upscale_credits, 'Image upscale']);
     
     res.json({ success: true, upscaled_url: outPath });
   } catch (err) {
-    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });
 
@@ -184,7 +214,7 @@ router.post('/:id/listing-content', async (req, res) => {
     );
     
     res.json(content);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { res.status(getErrorStatusCode(err)).json({ error: err.message }); }
 });
 
 // Get product images
@@ -201,7 +231,7 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
     if (!req.files?.customer_photo || !req.files?.product_photo) return res.status(400).json({ error: 'Both photos required' });
     
     const costs = await getCreditCosts(req.user.id);
-    await useCredits(req.user.id, costs.tryon_credits);
+    await ensureCreditsAvailable(req.user.id, costs.tryon_credits);
     
     const { product_name, product_category, product_color } = req.body;
     const productDetails = { name: product_name || 'Product', category: product_category || 'clothing', color: product_color };
@@ -211,6 +241,8 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
       req.files.product_photo[0].path,
       productDetails
     );
+
+    if (!results.length) throw new Error('No try-on images generated. Check Gemini quota/billing and retry.');
     
     const savedImages = [];
     for (const r of results) {
@@ -219,6 +251,8 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
       fs.writeFileSync(outPath, buf);
       savedImages.push({ angle: r.angle, url: outPath });
     }
+
+    await useCredits(req.user.id, costs.tryon_credits);
     
     const { rows } = await query(
       'INSERT INTO customer_tryon (owner_id, customer_photo, product_photo, result_images, credits_used) VALUES ($1,$2,$3,$4,$5) RETURNING *',
@@ -229,7 +263,7 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
     
     res.json({ success: true, images: savedImages, record: rows[0] });
   } catch (err) {
-    res.status(err.message === 'Insufficient credits' ? 402 : 500).json({ error: err.message });
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });
 

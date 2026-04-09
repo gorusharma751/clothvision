@@ -163,6 +163,21 @@ export default function StudioPhoto() {
 
   const creditCost = selectedAngles.length * (modelMode==='consistent'?2:1);
 
+  const getAiErrorMessage = (err) => {
+    const msg = err?.response?.data?.error || err?.message || '';
+    if (/insufficient credits/i.test(msg)) return 'Not enough credits! Request more from admin.';
+    if (/quota exceeded|active quota|billing|rate-limits|too many requests/i.test(msg)) {
+      return 'Gemini quota exceeded. Enable billing or use a project with active quota, then retry.';
+    }
+    if (/api key is invalid|api key not valid|invalid api key/i.test(msg)) {
+      return 'Gemini API key is invalid or restricted. Verify key restrictions in Google Cloud.';
+    }
+    if (/permission denied|forbidden|service_disabled|not permitted/i.test(msg)) {
+      return 'Gemini API is not permitted for this project. Enable Generative Language API and billing.';
+    }
+    return msg || 'Generation failed. Please try again.';
+  };
+
   // ── Generate ──────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!productFiles.length) return toast.error('Please upload at least one product photo');
@@ -211,9 +226,7 @@ export default function StudioPhoto() {
         toast.success('Product photo generated!');
       }
     } catch(err) {
-      const msg = err.response?.data?.error;
-      if (msg === 'Insufficient credits') toast.error('Not enough credits! Request more from admin.');
-      else toast.error(msg || 'Generation failed. Check your Gemini API key.');
+      toast.error(getAiErrorMessage(err));
       setStep(3);
     } finally { setGenerating(false); }
   };

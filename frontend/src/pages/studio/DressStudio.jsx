@@ -128,6 +128,21 @@ export default function DressStudio() {
     return false;
   };
 
+  const getAiErrorMessage = (err) => {
+    const msg = err?.response?.data?.error || err?.message || '';
+    if (/insufficient credits/i.test(msg)) return 'Not enough credits! Request more from Credits page.';
+    if (/quota exceeded|active quota|billing|rate-limits|too many requests/i.test(msg)) {
+      return 'Gemini quota exceeded. Enable billing or use a project with active quota, then retry.';
+    }
+    if (/api key is invalid|api key not valid|invalid api key/i.test(msg)) {
+      return 'Gemini API key is invalid or restricted. Verify key restrictions in Google Cloud.';
+    }
+    if (/permission denied|forbidden|service_disabled|not permitted/i.test(msg)) {
+      return 'Gemini API is not permitted for this project. Enable Generative Language API and billing.';
+    }
+    return msg || 'Generation failed. Please try again.';
+  };
+
   const generate = async () => {
     const productFiles = items.filter(x=>x.file);
     if (!productFiles.length) return toast.error('Upload at least one product image');
@@ -165,8 +180,7 @@ export default function DressStudio() {
       setStep(3);
       toast.success('Images generated!');
     } catch(err) {
-      if (err.response?.data?.error === 'Insufficient credits') toast.error('Not enough credits! Request more from Credits page.');
-      else toast.error(err.response?.data?.error || 'Generation failed. Check your Gemini API key.');
+      toast.error(getAiErrorMessage(err));
     } finally { setGenerating(false); }
   };
 
