@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, X, Plus, Wand2, Download, Copy, Check } from 'lu
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildUploadUrl } from '../../utils/uploads';
+import Layout from '../../components/shared/Layout';
 
 const IMG = path => buildUploadUrl(path);
 
@@ -127,17 +128,18 @@ export default function ItemsStudio() {
   const STEPS = ['Item Type','Upload & Options','Results'];
 
   return (
-    <div style={{minHeight:'100vh',background:'#0a0a0f'}}>
-      <div style={{position:'sticky',top:0,zIndex:20,padding:'12px 20px',display:'flex',alignItems:'center',gap:16,background:'rgba(10,10,15,.95)',backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(240,180,41,.1)'}}>
-        <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} style={{width:36,height:36,borderRadius:10,border:'1px solid rgba(240,180,41,.25)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#f0b429'}}>
-          <ArrowLeft size={16}/>
+    <Layout
+      title="Items / Accessories Studio"
+      subtitle="Watch, Perfume, Cap, Bag and more"
+      contentPadding={0}
+      actions={
+        <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} className="btn btn-outline" style={{padding:'8px 12px'}}>
+          <ArrowLeft size={14}/>{step===0 ? 'Back to Studio' : 'Back Step'}
         </button>
-        <div>
-          <h1 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1rem',color:'#fff'}}>Items / Accessories Studio</h1>
-          <p style={{fontSize:11,color:'rgba(240,180,41,.4)'}}>Watch, Perfume, Cap, Bag & more</p>
-        </div>
-      </div>
-      <div style={{maxWidth:860,margin:'0 auto',padding:'24px 16px'}}>
+      }
+    >
+      <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
+        <div style={{maxWidth:860,margin:'0 auto',padding:'24px 16px'}}>
         {/* Steps */}
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:28,flexWrap:'wrap'}}>
           {STEPS.map((s,i)=>(
@@ -311,7 +313,8 @@ export default function ItemsStudio() {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }

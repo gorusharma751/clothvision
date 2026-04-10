@@ -1,7 +1,7 @@
 import React from 'react';
 import Sidebar from './Sidebar';
 
-export default function Layout({ children, title, subtitle, actions }) {
+export default function Layout({ children, title, subtitle, actions, contentPadding = 24 }) {
   return (
     <div style={{display:'flex',minHeight:'100vh',background:'#0a0a0f'}}>
       <Sidebar/>
@@ -15,7 +15,7 @@ export default function Layout({ children, title, subtitle, actions }) {
             {actions && <div style={{display:'flex',alignItems:'center',gap:8}}>{actions}</div>}
           </div>
         )}
-        <div style={{padding:24}}>{children}</div>
+        <div style={{padding:contentPadding}}>{children}</div>
       </main>
     </div>
   );

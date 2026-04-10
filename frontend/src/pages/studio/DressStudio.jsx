@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, X, Upload, User, Shuffle, Lock, Wand2, Download,
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildUploadUrl } from '../../utils/uploads';
+import Layout from '../../components/shared/Layout';
 
 /* ── tiny helpers ── */
 const IMG = path => buildUploadUrl(path);
@@ -205,19 +206,18 @@ export default function DressStudio() {
   const genderData = GENDERS.find(g => g.id === gender?.id);
 
   return (
-    <div style={{minHeight:'100vh',background:'#0a0a0f'}}>
-      {/* Header */}
-      <div style={{position:'sticky',top:0,zIndex:20,padding:'12px 20px',display:'flex',alignItems:'center',gap:16,background:'rgba(10,10,15,.95)',backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(124,58,237,.1)'}}>
-        <button onClick={()=> step===0 ? nav('/owner/studio') : setStep(s=>s-1)} style={{width:36,height:36,borderRadius:10,border:'1px solid rgba(124,58,237,.25)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#a78bfa'}}>
-          <ArrowLeft size={16}/>
+    <Layout
+      title="Dress / Clothing Studio"
+      subtitle="AI-powered fashion photography"
+      contentPadding={0}
+      actions={
+        <button onClick={()=> step===0 ? nav('/owner/studio') : setStep(s=>s-1)} className="btn btn-outline" style={{padding:'8px 12px'}}>
+          <ArrowLeft size={14}/>{step===0 ? 'Back to Studio' : 'Back Step'}
         </button>
-        <div>
-          <h1 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1rem',color:'#fff'}}>Dress / Clothing Studio</h1>
-          <p style={{fontSize:11,color:'rgba(162,140,250,.4)'}}>AI-powered fashion photography</p>
-        </div>
-      </div>
-
-      <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
+      }
+    >
+      <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
+        <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
         <Steps current={step} steps={STEPS}/>
 
         {/* ── STEP 0: Gender + Category ── */}
@@ -492,7 +492,8 @@ export default function DressStudio() {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }
