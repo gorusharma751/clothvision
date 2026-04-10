@@ -2,9 +2,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 
-const getApiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const getTextModelName = () => process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash';
-const getImageModelName = () => process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
+
+const getApiKey = () => envVal('GEMINI_API_KEY') || envVal('GOOGLE_API_KEY');
+const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
+const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
 
 const getClient = () => {
   const apiKey = getApiKey();

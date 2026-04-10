@@ -12,7 +12,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadDirConfig = process.env.UPLOAD_DIR || './uploads';
+const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();
 const UPLOAD_ROOT = path.isAbsolute(uploadDirConfig)
   ? uploadDirConfig
   : path.resolve(__dirname, '..', uploadDirConfig);
