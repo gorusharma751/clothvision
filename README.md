@@ -75,3 +75,34 @@ Browser mein kholo: **http://localhost:5173**
 ## Platforms Supported
 - **Flipkart:** Front, Back, Left Side, Right Side (4 angles)
 - **Amazon:** Front, Back, Left Side, 3/4 Front + Detail (5 angles)
+
+---
+
+## Production Deploy (Vercel)
+
+This repository is configured for deploying the **frontend on Vercel**.
+
+### 1. Deploy backend first (production host)
+
+Deploy the `backend/` app to any Node host (Render/Railway/Fly/etc.) and set:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GEMINI_API_KEY`
+- `FRONTEND_URL` = your Vercel domain (after frontend deploy)
+
+### 2. Configure Vercel frontend env vars
+
+Use values from `frontend/.env.production.example`:
+
+- `VITE_API_BASE_URL=https://your-backend-domain.com/api`
+- `VITE_UPLOADS_BASE_URL=https://your-backend-domain.com`
+
+### 3. Deploy this repo to Vercel
+
+- Import this GitHub repo in Vercel
+- Keep root as repository root (uses `vercel.json`)
+- Add the two `VITE_*` env vars
+- Deploy
+
+After deploy, Vercel gives your live URL automatically.

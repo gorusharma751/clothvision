@@ -4,8 +4,9 @@ import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, ArrowRight, X, Plus, Wand2, Download, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
 
-const IMG = path => path ? `/uploads/${path.split('/uploads/')[1]}?token=${localStorage.getItem('cv_token')}` : null;
+const IMG = path => buildUploadUrl(path);
 
 const ITEM_TYPES = [
   { id:'watch', label:'Watch', emoji:'⌚' },

@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../database.js';
 import { authenticate } from '../middleware/auth.js';
@@ -10,10 +11,23 @@ import { analyzeProduct, generateTryOn, generateProductBG, generateCustomerTryOn
 const router = express.Router();
 router.use(authenticate);
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadDirConfig = process.env.UPLOAD_DIR || './uploads';
+const UPLOAD_ROOT = path.isAbsolute(uploadDirConfig)
+  ? uploadDirConfig
+  : path.resolve(__dirname, '..', uploadDirConfig);
+
+const getUserUploadDir = (userId) => path.join(UPLOAD_ROOT, String(userId));
+const ensureUserUploadDir = (userId) => {
+  const dir = getUserUploadDir(userId);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+};
+const makeUploadPath = (userId, fileName) => path.join(ensureUserUploadDir(userId), fileName).replace(/\\/g, '/');
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = `./uploads/${req.user.id}`;
-    fs.mkdirSync(dir, { recursive: true });
+    const dir = ensureUserUploadDir(req.user.id);
     cb(null, dir);
   },
   filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
@@ -99,7 +113,7 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
         const result = await generateTryOn(req.file.path, product.original_image, product, angle);
         if (result.success) {
           const imageBuffer = Buffer.from(result.imageData, 'base64');
-          const outPath = `./uploads/${req.user.id}/gen_${uuidv4()}.jpg`;
+          const outPath = makeUploadPath(req.user.id, `gen_${uuidv4()}.jpg`);
           fs.writeFileSync(outPath, imageBuffer);
 
           const { rows } = await query(
@@ -146,7 +160,7 @@ router.post('/:id/generate-bg', async (req, res) => {
     await useCredits(req.user.id, costs.credits_per_image);
     
     const imageBuffer = Buffer.from(result.imageData, 'base64');
-    const outPath = `./uploads/${req.user.id}/bg_${uuidv4()}.jpg`;
+    const outPath = makeUploadPath(req.user.id, `bg_${uuidv4()}.jpg`);
     fs.writeFileSync(outPath, imageBuffer);
     
     const { rows } = await query(
@@ -247,7 +261,7 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
     const savedImages = [];
     for (const r of results) {
       const buf = Buffer.from(r.imageData, 'base64');
-      const outPath = `./uploads/${req.user.id}/ctryon_${uuidv4()}.jpg`;
+      const outPath = makeUploadPath(req.user.id, `ctryon_${uuidv4()}.jpg`);
       fs.writeFileSync(outPath, buf);
       savedImages.push({ angle: r.angle, url: outPath });
     }

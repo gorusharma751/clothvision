@@ -5,6 +5,7 @@ import Layout from '../../components/shared/Layout';
 import StatCard from '../../components/shared/StatCard';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
 
 export default function OwnerDashboard() {
   const { user } = useAuth();
@@ -53,7 +54,7 @@ export default function OwnerDashboard() {
             {products.slice(0,8).map(p=>(
               <Link key={p.id} to="/owner/studio" style={{textDecoration:'none'}}>
                 <div style={{aspectRatio:'3/4',borderRadius:10,overflow:'hidden',background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.1)',marginBottom:6}}>
-                  {p.original_image?<img src={`/uploads/${p.original_image.split('/uploads/')[1]}?token=${localStorage.getItem('cv_token')}`} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>📦</div>}
+                  {p.original_image?<img src={buildUploadUrl(p.original_image)} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>📦</div>}
                 </div>
                 <p style={{fontSize:11,color:'rgba(226,226,240,.6)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
               </Link>

@@ -3,7 +3,7 @@ const colors={purple:{bg:'rgba(124,58,237,.08)',border:'rgba(124,58,237,.2)',ico
 export default function StatCard({icon:Icon,label,value,color='purple',index=0}){
   const c=colors[color]||colors.purple;
   return(
-    <div className="cv-card" style={{padding:'1.25rem',borderColor:c.border,animationDelay:`${index*.08}s`}} className="cv-card animate-fade-up">
+    <div className="cv-card animate-fade-up" style={{padding:'1.25rem',borderColor:c.border,animationDelay:`${index*.08}s`}}>
       <div style={{width:40,height:40,borderRadius:12,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:12}}>
         <Icon size={20} color={c.icon}/>
       </div>

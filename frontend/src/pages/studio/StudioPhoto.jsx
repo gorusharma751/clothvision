@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { useDropzone } from 'react-dropzone';
 import Layout from '../../components/shared/Layout';
 import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
 
 // ─── Constants ────────────────────────────────────────────────
 const CATEGORIES = {
@@ -271,10 +272,10 @@ export default function StudioPhoto() {
 
   const downloadImg = url => {
     const a = document.createElement('a');
-    a.href = `${url}?token=${localStorage.getItem('cv_token')}`;
+    a.href = buildUploadUrl(url);
     a.download = 'clothvision_output.jpg'; a.click();
   };
-  const imgUrl = path => path ? `/uploads/${path.split('/uploads/')[1]}?token=${localStorage.getItem('cv_token')}` : null;
+  const imgUrl = path => buildUploadUrl(path);
   const copy = (text, key) => { navigator.clipboard.writeText(text); setCopied(key); setTimeout(()=>setCopied(''),2000); toast.success('Copied!'); };
 
   // ── Render helpers ────────────────────────────────────────

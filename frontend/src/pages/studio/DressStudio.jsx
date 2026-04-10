@@ -4,9 +4,10 @@ import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, ArrowRight, X, Upload, User, Shuffle, Lock, Wand2, Download, Copy, Check, Plus, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
 
 /* ── tiny helpers ── */
-const IMG = path => path ? `/uploads/${path.split('/uploads/')[1]}?token=${localStorage.getItem('cv_token')}` : null;
+const IMG = path => buildUploadUrl(path);
 
 const GENDERS = [
   { id:'women', label:'Women', emoji:'👩', subs:['Top','Dress','Jeans','Skirt','Kurti','Saree','Lehenga','Jacket','Other'] },

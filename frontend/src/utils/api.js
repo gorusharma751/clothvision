@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api', timeout: 120000 });
+const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
+const API_BASE_URL = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '/api');
+
+const api = axios.create({ baseURL: API_BASE_URL, timeout: 120000 });
 
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem('cv_token');

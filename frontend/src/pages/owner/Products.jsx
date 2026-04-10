@@ -4,6 +4,7 @@ import { Plus, Package, Trash2, Wand2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
 
 export default function OwnerProducts() {
   const [products, setProducts] = useState([]);
@@ -27,7 +28,7 @@ export default function OwnerProducts() {
           {products.map(p=>(
             <div key={p.id} style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,overflow:'hidden'}}>
               <div style={{aspectRatio:'3/4',background:'rgba(124,58,237,.05)',overflow:'hidden'}}>
-                {p.original_image ? <img src={`/uploads/${p.original_image.split('/uploads/')[1]}?token=${localStorage.getItem('cv_token')}`} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>📦</div>}
+                {p.original_image ? <img src={buildUploadUrl(p.original_image)} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>📦</div>}
               </div>
               <div style={{padding:'10px 12px'}}>
                 <p style={{fontWeight:600,color:'#fff',fontSize:13,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
