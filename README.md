@@ -101,8 +101,23 @@ Use values from `frontend/.env.production.example`:
 ### 3. Deploy this repo to Vercel
 
 - Import this GitHub repo in Vercel
-- Keep root as repository root (uses `vercel.json`)
+- **Recommended:** Keep root as repository root (uses root `vercel.json`)
 - Add the two `VITE_*` env vars
 - Deploy
 
 After deploy, Vercel gives your live URL automatically.
+
+### Troubleshooting: `Cannot GET /`
+
+If your deployed URL shows `Cannot GET /`:
+
+- Confirm Vercel project **Root Directory** is either:
+  - repository root (`.`), or
+  - `frontend` (in this case frontend `vercel.json` handles build/output)
+- If using repo root, `vercel.json` must include:
+  - `buildCommand: npm install --prefix frontend && npm run build --prefix frontend`
+  - `outputDirectory: frontend/dist`
+- Redeploy after saving config changes.
+- Verify these URLs:
+  - `https://your-domain.vercel.app/` should load app
+  - `https://your-domain.vercel.app/api/health` should return JSON health status
