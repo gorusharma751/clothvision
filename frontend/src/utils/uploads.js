@@ -1,6 +1,8 @@
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
 
-const API_BASE_URL = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '');
+const envApiBase = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '');
+const isVercelHosted = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/i.test(window.location.hostname);
+const API_BASE_URL = isVercelHosted ? '/api' : envApiBase;
 const UPLOADS_BASE_URL = trimTrailingSlash(
   import.meta.env.VITE_UPLOADS_BASE_URL || (API_BASE_URL ? API_BASE_URL.replace(/\/api$/, '') : '')
 );
