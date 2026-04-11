@@ -8,6 +8,7 @@ export default function StudioSelect() {
   const cards = [
     { id:'dress', icon:'👗', label:'Dress / Clothing', desc:'Shirts, T-shirts, Jeans, Kurta, Saree & all clothing', color:'#7c3aed', border:'rgba(124,58,237,.4)', route:'/owner/studio/dress' },
     { id:'items', icon:'⌚', label:'Items / Accessories', desc:'Watch, Perfume, Cap, Bag, Shoes, Belt & more', color:'#f0b429', border:'rgba(240,180,41,.4)', route:'/owner/studio/items' },
+    { id:'scene', icon:'🛋️', label:'Scene Builder', desc:'Place product in any background — car, room, table, custom', color:'#f0b429', border:'rgba(240,180,41,.4)', route:'/owner/studio/scene' },
     { id:'ugc', icon:'🎬', label:'UGC Photo / Video', desc:'Coming Soon — User-generated content ads', color:'rgba(162,140,250,.3)', border:'rgba(124,58,237,.15)', disabled:true },
   ];
   return (
