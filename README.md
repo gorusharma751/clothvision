@@ -91,6 +91,17 @@ Deploy the `backend/` app to any Node host (Render/Railway/Fly/etc.) and set:
 - `GEMINI_API_KEY`
 - `FRONTEND_URL` = your Vercel domain (after frontend deploy)
 
+#### File-based env mode (no manual Railway variables)
+
+If you want Railway to run from repo env files only:
+
+- Keep all keys in `backend/.env.example` (canonical key list)
+- Keep real values in `backend/.env`
+- Commit `backend/.env` so Railway deploy can read it at runtime
+- `backend/scripts/ensure-env.js` auto-adds any missing keys from `.env.example` into `.env` during `npm start` / `npm run dev`
+
+Note: committing `.env` stores secrets in git history. Use only in private repos you control.
+
 ### 2. Configure Vercel frontend env vars
 
 Use values from `frontend/.env.production.example`:
