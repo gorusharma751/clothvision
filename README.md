@@ -42,6 +42,15 @@ DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/clothvi
 GEMINI_API_KEY=AIza...your_key_here...
 ```
 
+Recommended: `backend/.env` ko deployment/shared values ke liye rakho, aur local testing ke liye `backend/.env.local` use karo.
+
+```powershell
+cd backend
+Copy-Item .env.local.example .env.local
+```
+
+Then edit only `backend/.env.local` for local overrides (DB host/password, localhost frontend URL).
+
 **Gemini API key FREE milti hai:** https://aistudio.google.com/app/apikey
 
 ### Step 5 — Start karo
@@ -99,6 +108,14 @@ If you want Railway to run from repo env files only:
 - Keep real values in `backend/.env`
 - Commit `backend/.env` so Railway deploy can read it at runtime
 - `backend/scripts/ensure-env.js` auto-adds any missing keys from `.env.example` into `.env` during `npm start` / `npm run dev`
+
+#### Local overrides without breaking live deploy
+
+- Backend now loads env in this order:
+   - `backend/.env`
+   - `backend/.env.local` (only when NODE_ENV is not production, and this file overrides `.env`)
+- `backend/.env.local` is git-ignored, so local DB/frontend settings stay local.
+- Use `backend/.env.local.example` as template.
 
 Note: committing `.env` stores secrets in git history. Use only in private repos you control.
 
