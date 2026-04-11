@@ -8,6 +8,7 @@ import { buildUploadUrl } from '../../utils/uploads';
 
 export default function OwnerProducts() {
   const [products, setProducts] = useState([]);
+  const [imageFailed, setImageFailed] = useState({});
   const load = () => api.get('/products').then(r=>setProducts(r.data)).catch(()=>{});
   useEffect(()=>{load();},[]);
   const del = async id => {
@@ -28,7 +29,19 @@ export default function OwnerProducts() {
           {products.map(p=>(
             <div key={p.id} style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,overflow:'hidden'}}>
               <div style={{aspectRatio:'3/4',background:'rgba(124,58,237,.05)',overflow:'hidden'}}>
-                {p.original_image ? <img src={buildUploadUrl(p.original_image)} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/> : <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:32}}>📦</div>}
+                {p.original_image && !imageFailed[p.id] ? (
+                  <img
+                    src={buildUploadUrl(p.original_image)}
+                    alt={p.name}
+                    style={{width:'100%',height:'100%',objectFit:'cover'}}
+                    onError={() => setImageFailed(prev => ({ ...prev, [p.id]: true }))}
+                  />
+                ) : (
+                  <div style={{width:'100%',height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontSize:28,color:'rgba(162,140,250,.5)',gap:6}}>
+                    <Package size={24}/>
+                    <span style={{fontSize:10,letterSpacing:'.08em'}}>IMAGE UNAVAILABLE</span>
+                  </div>
+                )}
               </div>
               <div style={{padding:'10px 12px'}}>
                 <p style={{fontWeight:600,color:'#fff',fontSize:13,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>

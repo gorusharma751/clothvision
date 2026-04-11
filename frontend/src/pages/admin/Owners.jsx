@@ -9,6 +9,51 @@ import api from '../../utils/api';
 const THEMES = ['dark-luxury','light-minimal','colorful-bold','professional-clean'];
 const PLANS = ['basic','pro','enterprise'];
 
+const OwnerFormFields = ({ data, setData, isEdit }) => {
+  const updateField = (key, value) => setData(prev => ({ ...(prev || {}), [key]: value }));
+
+  return (
+    <div className="space-y-3">
+      {!isEdit && <><div>
+        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">EMAIL *</label>
+        <input className="input-field" value={data.email} onChange={e=>updateField('email', e.target.value)} required type="email" placeholder="owner@shop.com"/>
+      </div>
+      <div>
+        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">PASSWORD *</label>
+        <input className="input-field" value={data.password} onChange={e=>updateField('password', e.target.value)} required type="password" placeholder="Min 6 chars"/>
+      </div></>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">OWNER NAME</label>
+          <input className="input-field" value={data.name} onChange={e=>updateField('name', e.target.value)} placeholder="John Doe"/>
+        </div>
+        <div>
+          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">SHOP NAME</label>
+          <input className="input-field" value={data.shop_name} onChange={e=>updateField('shop_name', e.target.value)} placeholder="My Fashion Store"/>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">THEME</label>
+          <select className="input-field" value={data.theme} onChange={e=>updateField('theme', e.target.value)}>
+            {THEMES.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">PLAN</label>
+          <select className="input-field" value={data.plan} onChange={e=>updateField('plan', e.target.value)}>
+            {PLANS.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+      </div>
+      {!isEdit && <div>
+        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">INITIAL CREDITS</label>
+        <input className="input-field" type="number" value={data.initial_credits} onChange={e=>updateField('initial_credits', Number.isFinite(parseInt(e.target.value, 10)) ? parseInt(e.target.value, 10) : 0)} min="0"/>
+      </div>}
+    </div>
+  );
+};
+
 export default function AdminOwners() {
   const [owners, setOwners] = useState([]);
   const [filtered, setFiltered] = useState([]);
@@ -56,47 +101,6 @@ export default function AdminOwners() {
       toast.success(`Added ${creditAmt} credits!`); setShowCredit(null); setCreditAmt(''); setCreditDesc(''); load();
     } catch(err) { toast.error(err.response?.data?.error || 'Error'); }
   };
-
-  const FormFields = ({ data, setData, isEdit }) => (
-    <div className="space-y-3">
-      {!isEdit && <><div>
-        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">EMAIL *</label>
-        <input className="input-field" value={data.email} onChange={e=>setData({...data,email:e.target.value})} required type="email" placeholder="owner@shop.com"/>
-      </div>
-      <div>
-        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">PASSWORD *</label>
-        <input className="input-field" value={data.password} onChange={e=>setData({...data,password:e.target.value})} required type="password" placeholder="Min 6 chars"/>
-      </div></>}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">OWNER NAME</label>
-          <input className="input-field" value={data.name} onChange={e=>setData({...data,name:e.target.value})} placeholder="John Doe"/>
-        </div>
-        <div>
-          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">SHOP NAME</label>
-          <input className="input-field" value={data.shop_name} onChange={e=>setData({...data,shop_name:e.target.value})} placeholder="My Fashion Store"/>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">THEME</label>
-          <select className="input-field" value={data.theme} onChange={e=>setData({...data,theme:e.target.value})}>
-            {THEMES.map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">PLAN</label>
-          <select className="input-field" value={data.plan} onChange={e=>setData({...data,plan:e.target.value})}>
-            {PLANS.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-      </div>
-      {!isEdit && <div>
-        <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">INITIAL CREDITS</label>
-        <input className="input-field" type="number" value={data.initial_credits} onChange={e=>setData({...data,initial_credits:parseInt(e.target.value)})} min="0"/>
-      </div>}
-    </div>
-  );
 
   return (
     <Layout title="Shop Owners" subtitle={`${owners.length} registered owners`}
@@ -161,7 +165,7 @@ export default function AdminOwners() {
       {/* Add Modal */}
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="Create Shop Owner">
         <form onSubmit={handleAdd} className="space-y-4">
-          <FormFields data={form} setData={setForm} isEdit={false}/>
+          <OwnerFormFields data={form} setData={setForm} isEdit={false}/>
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={()=>setShowAdd(false)} className="flex-1 py-2 rounded-xl border text-purple-400 text-sm hover:bg-white/5" style={{borderColor:'rgba(124,58,237,0.2)'}}>Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 btn-primary">{loading ? 'Creating...' : 'Create Owner'}</button>
@@ -172,7 +176,7 @@ export default function AdminOwners() {
       {/* Edit Modal */}
       <Modal open={!!editOwner} onClose={()=>setEditOwner(null)} title="Edit Owner">
         {editOwner && <form onSubmit={handleEdit} className="space-y-4">
-          <FormFields data={editOwner} setData={setEditOwner} isEdit={true}/>
+          <OwnerFormFields data={editOwner} setData={setEditOwner} isEdit={true}/>
           <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(124,58,237,0.05)', border:'1px solid rgba(124,58,237,0.1)'}}>
             <span className="text-sm text-purple-300">Active</span>
             <button type="button" onClick={()=>setEditOwner({...editOwner, is_active:!editOwner.is_active})} className="text-purple-400">

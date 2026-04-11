@@ -11,6 +11,7 @@ export default function OwnerDashboard() {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [credits, setCredits] = useState({ balance:0, total_used:0 });
+  const [imageFailed, setImageFailed] = useState({});
 
   useEffect(() => {
     api.get('/products').then(r => setProducts(r.data)).catch(()=>{});
@@ -54,7 +55,16 @@ export default function OwnerDashboard() {
             {products.slice(0,8).map(p=>(
               <Link key={p.id} to="/owner/studio" style={{textDecoration:'none'}}>
                 <div style={{aspectRatio:'3/4',borderRadius:10,overflow:'hidden',background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.1)',marginBottom:6}}>
-                  {p.original_image?<img src={buildUploadUrl(p.original_image)} alt={p.name} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>📦</div>}
+                  {p.original_image && !imageFailed[p.id] ? (
+                    <img
+                      src={buildUploadUrl(p.original_image)}
+                      alt={p.name}
+                      style={{width:'100%',height:'100%',objectFit:'cover'}}
+                      onError={() => setImageFailed(prev => ({ ...prev, [p.id]: true }))}
+                    />
+                  ) : (
+                    <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24}}>📦</div>
+                  )}
                 </div>
                 <p style={{fontSize:11,color:'rgba(226,226,240,.6)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
               </Link>
