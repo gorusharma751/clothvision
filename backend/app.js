@@ -23,6 +23,13 @@ const frontendOrigin = frontendOriginRaw === '*' ? '*' : frontendOriginRaw.repla
 
 export const app = express();
 
+const trustProxyRaw = String(process.env.TRUST_PROXY || '').trim().toLowerCase();
+if (trustProxyRaw === 'true') app.set('trust proxy', true);
+else if (trustProxyRaw === 'false') app.set('trust proxy', false);
+else if (/^\d+$/.test(trustProxyRaw)) app.set('trust proxy', Number(trustProxyRaw));
+else if (trustProxyRaw) app.set('trust proxy', trustProxyRaw);
+else if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
