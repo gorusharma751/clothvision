@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 
+const isRemoteUrl = (value = '') => /^https?:\/\//i.test(String(value));
+
 const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
 
 const getApiKey = () => envVal('GEMINI_API_KEY') || envVal('GOOGLE_API_KEY');
@@ -56,13 +58,31 @@ const normalizeGeminiError = (error) => {
   return err;
 };
 
-const fileToBase64 = (filePath) => {
+const fileToBase64 = async (filePath) => {
+  if (isRemoteUrl(filePath)) {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image from URL (${response.status} ${response.statusText})`);
+    }
+    const data = Buffer.from(await response.arrayBuffer());
+    return data.toString('base64');
+  }
+
   const data = fs.readFileSync(filePath);
   return data.toString('base64');
 };
 
 const getMimeType = (filePath) => {
-  const ext = path.extname(filePath).toLowerCase();
+  let extTarget = filePath;
+  if (isRemoteUrl(filePath)) {
+    try {
+      extTarget = new URL(filePath).pathname;
+    } catch {
+      extTarget = filePath;
+    }
+  }
+
+  const ext = path.extname(extTarget).toLowerCase();
   const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
   return types[ext] || 'image/jpeg';
 };
@@ -72,7 +92,7 @@ export const analyzeProduct = async (productImagePath, productDetails) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getTextModelName() });
   
-  const imageData = fileToBase64(productImagePath);
+  const imageData = await fileToBase64(productImagePath);
   const mimeType = getMimeType(productImagePath);
 
   const prompt = `You are a professional fashion/product photography expert.
@@ -127,8 +147,8 @@ export const generateTryOn = async (modelImagePath, productImagePath, productDet
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
-  const modelImageData = fileToBase64(modelImagePath);
-  const productImageData = fileToBase64(productImagePath);
+  const modelImageData = await fileToBase64(modelImagePath);
+  const productImageData = await fileToBase64(productImagePath);
   const modelMime = getMimeType(modelImagePath);
   const productMime = getMimeType(productImagePath);
 
@@ -187,7 +207,7 @@ export const generateProductBG = async (productImagePath, productDetails, bgStyl
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
-  const imageData = fileToBase64(productImagePath);
+  const imageData = await fileToBase64(productImagePath);
   const mimeType = getMimeType(productImagePath);
 
   const bgPrompts = {
@@ -241,8 +261,8 @@ export const generateCustomerTryOn = async (customerImagePath, productImagePath,
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
-  const customerData = fileToBase64(customerImagePath);
-  const productData = fileToBase64(productImagePath);
+  const customerData = await fileToBase64(customerImagePath);
+  const productData = await fileToBase64(productImagePath);
   const customerMime = getMimeType(customerImagePath);
   const productMime = getMimeType(productImagePath);
 

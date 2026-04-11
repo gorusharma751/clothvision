@@ -101,7 +101,8 @@ Use values from `frontend/.env.production.example`:
 ### 3. Deploy this repo to Vercel
 
 - Import this GitHub repo in Vercel
-- **Recommended:** Keep root as repository root (uses root `vercel.json`)
+- Set **Root Directory** to `frontend`
+- `frontend/vercel.json` is the canonical config file for SPA rewrites
 - Add the two `VITE_*` env vars
 - Deploy
 
@@ -111,13 +112,10 @@ After deploy, Vercel gives your live URL automatically.
 
 If your deployed URL shows `Cannot GET /`:
 
-- Confirm Vercel project **Root Directory** is either:
-  - repository root (`.`), or
-  - `frontend` (in this case frontend `vercel.json` handles build/output)
-- If using repo root, `vercel.json` must include:
-  - `buildCommand: npm install --prefix frontend && npm run build --prefix frontend`
-  - `outputDirectory: frontend/dist`
+- Confirm Vercel project **Root Directory** is exactly `frontend` (not `backend`)
+- If Vercel keeps old root settings, update in `Project Settings -> General -> Root Directory`
+- If root directory change is not available for the existing project, create a new Vercel project from same repo and choose `frontend` during import
 - Redeploy after saving config changes.
 - Verify these URLs:
   - `https://your-domain.vercel.app/` should load app
-  - `https://your-domain.vercel.app/api/health` should return JSON health status
+  - `https://your-backend-domain.com/api/health` should return JSON health status
