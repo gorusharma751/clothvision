@@ -113,7 +113,12 @@ router.post('/', upload.single('product_image'), async (req, res) => {
       [req.user.id, name, category, description, color, size_range, material, price, brand, imagePath, 'ready']
     );
     res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err?.code === '23503' && err?.constraint === 'products_owner_id_fkey') {
+      return res.status(401).json({ error: 'Session expired. Please login again.' });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Generate images with model

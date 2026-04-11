@@ -35,6 +35,7 @@ router.get('/me', authenticate, async (req, res) => {
       LEFT JOIN shops s ON s.owner_id = u.id
       LEFT JOIN credits c ON c.owner_id = u.id
       WHERE u.id = $1`, [req.user.id]);
+    if (!rows.length) return res.status(401).json({ error: 'Session expired. Please login again.' });
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
