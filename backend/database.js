@@ -4,11 +4,47 @@ dotenv.config();
 
 const { Pool } = pg;
 const localFallbackDbUrl = 'postgresql://postgres:postgres@localhost:5432/clothvision';
-const databaseUrl = String(process.env.DATABASE_URL || localFallbackDbUrl).trim();
+const databaseUrl = String(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || localFallbackDbUrl).trim();
+
+const shouldUseSsl = () => {
+  const explicit = String(process.env.DB_SSL || '').trim().toLowerCase();
+  if (explicit === 'true') return { rejectUnauthorized: false };
+  if (explicit === 'false') return false;
+
+  if (process.env.NODE_ENV === 'production') return { rejectUnauthorized: false };
+
+  try {
+    const host = new URL(databaseUrl).hostname;
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    if (!isLocalHost) return { rejectUnauthorized: false };
+  } catch {
+    // If URL parsing fails, keep local/dev default below.
+  }
+
+  return false;
+};
+
+const normalizeDbConnectionError = (error) => {
+  const raw = String(error?.message || error || 'Database connection failed');
+
+  if (/ENOTFOUND/i.test(raw) && /railway\.internal/i.test(raw + ' ' + databaseUrl)) {
+    return new Error(
+      'Cannot resolve postgres.railway.internal. Use a Railway Postgres URL reachable from this runtime (same project private network or Railway public connection URL).'
+    );
+  }
+
+  if (/SSL off|no pg_hba\.conf entry/i.test(raw)) {
+    return new Error(
+      'Postgres rejected a non-SSL connection. Set NODE_ENV=production or DB_SSL=true for managed Postgres providers.'
+    );
+  }
+
+  return error;
+};
 
 const pool = new Pool({
   connectionString: databaseUrl,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: shouldUseSsl()
 });
 
 export const query = (text, params) => pool.query(text, params);
@@ -19,8 +55,16 @@ export const initDB = async () => {
     throw new Error('DATABASE_URL is not set for production. Set a real Postgres connection string (not localhost).');
   }
 
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
+  } catch (err) {
+    throw normalizeDbConnectionError(err);
+  }
+
+  try {
+    await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -150,8 +194,9 @@ export const initDB = async () => {
     console.log('✅ Database initialized');
   } catch (err) {
     console.error('DB init error:', err.message);
+    throw err;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 
