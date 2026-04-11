@@ -186,10 +186,15 @@ export const initDB = async () => {
 
       INSERT INTO plan_settings (plan_name, credits_per_image, tryon_credits, upscale_credits, max_products, features, price)
       VALUES 
-        ('basic', 1, 3, 2, 50, '{"angles": 4, "bgRemoval": true, "export": ["amazon","flipkart"]}', 999),
+        ('basic', 8, 3, 2, 50, '{"angles": 4, "bgRemoval": true, "export": ["amazon","flipkart"]}', 999),
         ('pro', 1, 2, 1, 500, '{"angles": 5, "bgRemoval": true, "export": ["amazon","flipkart","meesho"], "priority": true}', 2999),
         ('enterprise', 1, 1, 1, 9999, '{"angles": 5, "bgRemoval": true, "export": ["all"], "priority": true, "apiAccess": true}', 9999)
       ON CONFLICT (plan_name) DO NOTHING;
+
+      -- Ensure existing installations move Basic plan to 8 credits per generated image.
+      UPDATE plan_settings
+      SET credits_per_image = 8
+      WHERE plan_name = 'basic';
     `);
     console.log('✅ Database initialized');
   } catch (err) {

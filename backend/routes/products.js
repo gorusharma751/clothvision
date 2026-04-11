@@ -59,7 +59,7 @@ const getErrorStatusCode = (err) => {
 // Get credit costs for user's plan
 const getCreditCosts = async (userId) => {
   const { rows } = await query('SELECT ps.credits_per_image, ps.tryon_credits, ps.upscale_credits FROM shops s JOIN plan_settings ps ON ps.plan_name = s.plan WHERE s.owner_id=$1', [userId]);
-  return rows[0] || { credits_per_image: 1, tryon_credits: 3, upscale_credits: 2 };
+  return rows[0] || { credits_per_image: 8, tryon_credits: 3, upscale_credits: 2 };
 };
 
 // Save generated image buffer: Cloudinary when configured, local disk otherwise.
@@ -160,9 +160,24 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     const actualCredits = results.length * costs.credits_per_image;
     await useCredits(req.user.id, actualCredits);
     
-    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', actualCredits, `Generated ${results.length} try-on images for "${product.name}"`]);
+    await query(
+      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
+      [
+        req.user.id,
+        'use',
+        actualCredits,
+        `Generated ${results.length} try-on images for "${product.name}" (${costs.credits_per_image}/image = ${actualCredits})`
+      ]
+    );
     
-    res.json({ success: true, images: results, credits_used: actualCredits, generation_errors: generationErrors });
+    res.json({
+      success: true,
+      images: results,
+      credits_used: actualCredits,
+      credits_per_image: costs.credits_per_image,
+      generated_count: results.length,
+      generation_errors: generationErrors
+    });
   } catch (err) {
     res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
@@ -192,9 +207,17 @@ router.post('/:id/generate-bg', async (req, res) => {
       [product.id, req.user.id, 'bg_only', bg_style, savedUrl, costs.credits_per_image]
     );
     
-    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.credits_per_image, `BG generation for "${product.name}"`]);
+    await query(
+      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
+      [
+        req.user.id,
+        'use',
+        costs.credits_per_image,
+        `BG generation for "${product.name}" (${costs.credits_per_image}/image)`
+      ]
+    );
     
-    res.json({ success: true, image: rows[0] });
+    res.json({ success: true, image: rows[0], credits_used: costs.credits_per_image, credits_per_image: costs.credits_per_image });
   } catch (err) {
     res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
