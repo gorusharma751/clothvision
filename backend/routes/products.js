@@ -91,11 +91,23 @@ const saveUploadedFile = async (filePath, userId) => {
 router.get('/', async (req, res) => {
   try {
     const { rows } = await query(`
-      SELECT p.*, COUNT(gi.id) as image_count
+      SELECT
+        p.*,
+        (
+          SELECT COUNT(*)::INT
+          FROM generated_images gi
+          WHERE gi.product_id = p.id
+        ) AS image_count,
+        (
+          SELECT COALESCE(gi.upscaled_url, gi.image_url)
+          FROM generated_images gi
+          WHERE gi.product_id = p.id
+          ORDER BY gi.created_at DESC
+          LIMIT 1
+        ) AS latest_image_url
       FROM products p
-      LEFT JOIN generated_images gi ON gi.product_id = p.id
       WHERE p.owner_id = $1
-      GROUP BY p.id ORDER BY p.created_at DESC
+      ORDER BY p.created_at DESC
     `, [req.user.id]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -8,9 +8,32 @@ import { buildUploadUrl } from '../../utils/uploads';
 
 export default function OwnerProducts() {
   const [products, setProducts] = useState([]);
-  const [imageFailed, setImageFailed] = useState({});
+  const [imageState, setImageState] = useState({});
   const load = () => api.get('/products').then(r=>setProducts(r.data)).catch(()=>{});
   useEffect(()=>{load();},[]);
+
+  const getCardImagePath = (product) => {
+    if (imageState[product.id] === 'fallback') return product.original_image;
+    return product.latest_image_url || product.original_image;
+  };
+
+  const onCardImageError = (product) => {
+    const state = imageState[product.id];
+    const canFallbackToOriginal =
+      state !== 'fallback' &&
+      state !== 'failed' &&
+      product.latest_image_url &&
+      product.original_image &&
+      product.latest_image_url !== product.original_image;
+
+    if (canFallbackToOriginal) {
+      setImageState(prev => ({ ...prev, [product.id]: 'fallback' }));
+      return;
+    }
+
+    setImageState(prev => ({ ...prev, [product.id]: 'failed' }));
+  };
+
   const del = async id => {
     if (!confirm('Delete this product?')) return;
     try { await api.delete(`/products/${id}`); toast.success('Deleted'); load(); } catch { toast.error('Error'); }
@@ -26,16 +49,27 @@ export default function OwnerProducts() {
         </div>
       ) : (
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:14}}>
-          {products.map(p=>(
+          {products.map(p=>{
+            const cardImage = getCardImagePath(p);
+            const hasGenerated = Number(p.image_count || 0) > 0;
+
+            return (
             <div key={p.id} style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,overflow:'hidden'}}>
-              <div style={{aspectRatio:'3/4',background:'rgba(124,58,237,.05)',overflow:'hidden'}}>
-                {p.original_image && !imageFailed[p.id] ? (
-                  <img
-                    src={buildUploadUrl(p.original_image)}
-                    alt={p.name}
-                    style={{width:'100%',height:'100%',objectFit:'cover'}}
-                    onError={() => setImageFailed(prev => ({ ...prev, [p.id]: true }))}
-                  />
+              <div style={{position:'relative',aspectRatio:'3/4',background:'rgba(124,58,237,.05)',overflow:'hidden'}}>
+                {cardImage && imageState[p.id] !== 'failed' ? (
+                  <>
+                    <img
+                      src={buildUploadUrl(cardImage)}
+                      alt={p.name}
+                      style={{width:'100%',height:'100%',objectFit:'cover'}}
+                      onError={() => onCardImageError(p)}
+                    />
+                    {hasGenerated && (
+                      <div style={{position:'absolute',top:8,right:8,padding:'3px 7px',borderRadius:999,border:'1px solid rgba(124,58,237,.45)',background:'rgba(124,58,237,.2)',color:'#c4b5fd',fontSize:10,fontWeight:700,letterSpacing:'.06em'}}>
+                        AI
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div style={{width:'100%',height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontSize:28,color:'rgba(162,140,250,.5)',gap:6}}>
                     <Package size={24}/>
@@ -46,6 +80,7 @@ export default function OwnerProducts() {
               <div style={{padding:'10px 12px'}}>
                 <p style={{fontWeight:600,color:'#fff',fontSize:13,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
                 <p style={{fontSize:11,color:'rgba(162,140,250,.4)',marginBottom:10}}>{p.category}{p.color?` · ${p.color}`:''}</p>
+                <p style={{fontSize:10,color:'rgba(162,140,250,.55)',marginBottom:10}}>{hasGenerated ? `${p.image_count} AI image${Number(p.image_count) === 1 ? '' : 's'} saved` : 'No AI images yet'}</p>
                 <div style={{display:'flex',gap:6}}>
                   <Link to="/owner/studio" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px',borderRadius:8,background:'rgba(124,58,237,.1)',color:'#a78bfa',fontSize:11,fontWeight:600,textDecoration:'none'}}>
                     <Wand2 size={11}/>Gen
@@ -56,7 +91,7 @@ export default function OwnerProducts() {
                 </div>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
     </Layout>
