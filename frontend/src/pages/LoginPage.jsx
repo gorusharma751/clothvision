@@ -15,9 +15,21 @@ export default function LoginPage() {
 
   const handleSubmit = async e => {
     e.preventDefault();
+
+    const normalizedEmail = String(email || '').trim();
+    const normalizedPassword = String(password || '');
+    if (!normalizedEmail || !normalizedPassword) {
+      toast.error('Email and password are required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
     setLoading(true);
     try {
-      const user = await login(email, password);
+      const user = await login(normalizedEmail, normalizedPassword);
       nav(user.role === 'admin' ? '/admin' : '/owner');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Login failed');
@@ -45,15 +57,15 @@ export default function LoginPage() {
 
         <div className="glass" style={{borderRadius:20,padding:'2rem'}}>
           <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1.25rem',marginBottom:'1.5rem',color:'#fff'}}>Sign In</h2>
-          <form onSubmit={handleSubmit} style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
+          <form onSubmit={handleSubmit} noValidate style={{display:'flex',flexDirection:'column',gap:'1rem'}}>
             <div>
               <label className="label">Email</label>
-              <input className="input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@clothvision.com" required/>
+              <input className="input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@clothvision.com"/>
             </div>
             <div>
               <label className="label">Password</label>
               <div style={{position:'relative'}}>
-                <input className="input" type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required style={{paddingRight:'2.5rem'}}/>
+                <input className="input" type={show?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{paddingRight:'2.5rem'}}/>
                 <button type="button" onClick={()=>setShow(!show)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#6b6b8a'}}>
                   {show?<EyeOff size={16}/>:<Eye size={16}/>}
                 </button>
