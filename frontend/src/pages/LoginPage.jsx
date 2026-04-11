@@ -32,7 +32,26 @@ export default function LoginPage() {
       const user = await login(normalizedEmail, normalizedPassword);
       nav(user.role === 'admin' ? '/admin' : '/owner');
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Login failed');
+      const status = err?.response?.status;
+      const backendError = err?.response?.data?.error;
+
+      if (!err?.response) {
+        toast.error('Unable to reach server. Check internet/firewall/VPN and retry.');
+      } else if (status === 401) {
+        toast.error('Invalid email or password');
+      } else if (status === 429) {
+        toast.error('Too many attempts. Please wait a bit and try again.');
+      } else if (status >= 500) {
+        toast.error(backendError || 'Server error during login. Please try again.');
+      } else {
+        toast.error(backendError || 'Login failed');
+      }
+
+      console.error('Login failed', {
+        status,
+        message: err?.message,
+        data: err?.response?.data
+      });
     } finally { setLoading(false); }
   };
 

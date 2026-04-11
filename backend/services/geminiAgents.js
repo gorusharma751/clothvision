@@ -44,6 +44,12 @@ const getClient = () => {
 const normalizeGeminiError = (error) => {
   const raw = error?.message || String(error || 'Gemini request failed');
 
+  if (/reported as leaked|key was reported as leaked|key is revoked|key has been disabled/i.test(raw)) {
+    const err = new Error('Gemini API key is revoked (reported leaked). Create a new key in Google AI Studio and update GEMINI_API_KEY.');
+    err.code = 'GEMINI_KEY_REVOKED';
+    return err;
+  }
+
   if (/API_KEY_INVALID|API key not valid|Please pass a valid API key|invalid api key/i.test(raw)) {
     const err = new Error('Gemini API key is invalid. Use a valid key from Google AI Studio.');
     err.code = 'GEMINI_KEY_INVALID';
@@ -77,6 +83,82 @@ const normalizeGeminiError = (error) => {
   const err = new Error(`Gemini request failed: ${raw}`);
   err.code = 'GEMINI_REQUEST_FAILED';
   return err;
+};
+
+const toSafeString = (value = '') => String(value || '').trim();
+
+const cleanArray = (items = []) => {
+  const seen = new Set();
+  const output = [];
+  for (const item of items) {
+    const v = toSafeString(item);
+    const key = v.toLowerCase();
+    if (!v || seen.has(key)) continue;
+    seen.add(key);
+    output.push(v);
+  }
+  return output;
+};
+
+const clamp = (value = '', max = 200) => {
+  const text = toSafeString(value);
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 3)).trim()}...`;
+};
+
+const buildFallbackListingContent = (productDetails = {}, platform = 'amazon') => {
+  const name = toSafeString(productDetails.name) || 'Fashion Product';
+  const category = toSafeString(productDetails.category) || 'Apparel';
+  const color = toSafeString(productDetails.color);
+  const material = toSafeString(productDetails.material);
+  const sizeRange = toSafeString(productDetails.size_range);
+  const brand = toSafeString(productDetails.brand);
+  const description = toSafeString(productDetails.description);
+
+  const titleBase = cleanArray([brand, name, color, material]).join(' ');
+  const titleLimit = platform === 'flipkart' ? 100 : 150;
+  const title = clamp(titleBase || name, titleLimit);
+
+  const bulletPoints = cleanArray([
+    `${name} designed for daily comfort and style`,
+    color ? `Color: ${color}` : '',
+    material ? `Material: ${material}` : '',
+    sizeRange ? `Size range: ${sizeRange}` : '',
+    'Suitable for casual, office, and outing wear'
+  ]).slice(0, 5);
+
+  const descParts = cleanArray([
+    `${name} is a ${category.toLowerCase()} option crafted for practical everyday wear.`,
+    color ? `It comes in ${color.toLowerCase()} color.` : '',
+    material ? `Material details: ${material}.` : '',
+    sizeRange ? `Available sizes: ${sizeRange}.` : '',
+    description
+  ]);
+
+  const keywords = cleanArray([
+    name,
+    category,
+    color,
+    material,
+    brand,
+    `${category} for women`,
+    `${category} for men`,
+    'fashion wear',
+    'stylish outfit'
+  ]).slice(0, 20);
+
+  return {
+    title,
+    description: clamp(descParts.join(' '), platform === 'flipkart' ? 1000 : 2000),
+    bullet_points: bulletPoints,
+    keywords,
+    category_path: `${category} > ${name}`,
+    search_terms: keywords.join(', '),
+    size_chart_note: sizeRange ? `Refer size range: ${sizeRange}` : 'Refer brand size chart before purchase.',
+    care_instructions: 'Gentle wash recommended. Do not bleach. Dry in shade.',
+    in_the_box: [name],
+    _fallback: true
+  };
 };
 
 const fileToBase64 = async (filePath) => {
@@ -388,20 +470,30 @@ Return ONLY valid JSON.`;
   try {
     result = await model.generateContent(prompt);
   } catch (error) {
-    throw normalizeGeminiError(error);
+    const normalized = normalizeGeminiError(error);
+    if (
+      [
+        'GEMINI_KEY_INVALID',
+        'GEMINI_KEY_MISSING',
+        'GEMINI_KEY_REVOKED',
+        'GEMINI_QUOTA_EXCEEDED',
+        'GEMINI_PERMISSION_DENIED',
+        'GEMINI_MODEL_UNAVAILABLE'
+      ].includes(normalized.code)
+    ) {
+      return {
+        ...buildFallbackListingContent(productDetails, platform),
+        _warning: normalized.message
+      };
+    }
+    throw normalized;
   }
   
   try {
     const text = result.response.text().replace(/```json|```/g, '').trim();
     return JSON.parse(text);
   } catch {
-    return {
-      title: productDetails.name,
-      description: productDetails.description || '',
-      bullet_points: [],
-      keywords: [],
-      category_path: productDetails.category
-    };
+    return buildFallbackListingContent(productDetails, platform);
   }
 };
 
