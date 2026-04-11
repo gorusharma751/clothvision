@@ -1,6 +1,5 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
-dotenv.config();
+import './loadEnv.js';
 
 const { Pool } = pg;
 const localFallbackDbUrl = 'postgresql://postgres:postgres@localhost:5432/clothvision';

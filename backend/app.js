@@ -1,17 +1,15 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import './loadEnv.js';
 import { initDB, query } from './database.js';
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import productRoutes from './routes/products.js';
 import creditRoutes from './routes/credits.js';
-
-dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();

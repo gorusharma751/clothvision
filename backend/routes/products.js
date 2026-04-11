@@ -56,6 +56,14 @@ const getErrorStatusCode = (err) => {
   return 500;
 };
 
+const normalizeTextArray = (value, separator = ',') => {
+  if (Array.isArray(value)) return value.map((v) => String(v || '').trim()).filter(Boolean);
+  return String(value || '')
+    .split(separator)
+    .map((v) => v.trim())
+    .filter(Boolean);
+};
+
 // Get credit costs for user's plan
 const getCreditCosts = async (userId) => {
   const { rows } = await query('SELECT ps.credits_per_image, ps.tryon_credits, ps.upscale_credits FROM shops s JOIN plan_settings ps ON ps.plan_name = s.plan WHERE s.owner_id=$1', [userId]);
@@ -90,15 +98,72 @@ const saveUploadedFile = async (filePath, userId) => {
 // List products
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await query(`
-      SELECT p.*, COUNT(gi.id) as image_count
-      FROM products p
-      LEFT JOIN generated_images gi ON gi.product_id = p.id
+    // Auto-heal stale products stuck in processing with no outputs for a while.
+    await query(`
+      UPDATE products p
+      SET status = 'failed', updated_at = NOW()
       WHERE p.owner_id = $1
-      GROUP BY p.id ORDER BY p.created_at DESC
+        AND p.status = 'processing'
+        AND p.updated_at < (NOW() - INTERVAL '10 minutes')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM generated_images gi
+          WHERE gi.product_id = p.id
+        )
+    `, [req.user.id]);
+
+    const { rows } = await query(`
+      SELECT
+        p.*,
+        (
+          SELECT COUNT(*)::INT
+          FROM generated_images gi
+          WHERE gi.product_id = p.id
+        ) AS image_count,
+        (
+          SELECT COALESCE(gi.upscaled_url, gi.image_url)
+          FROM generated_images gi
+          WHERE gi.product_id = p.id
+          ORDER BY gi.created_at DESC
+          LIMIT 1
+        ) AS latest_image_url
+      FROM products p
+      WHERE p.owner_id = $1
+      ORDER BY p.created_at DESC
     `, [req.user.id]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// List all generated outputs for owner gallery
+router.get('/generated', async (req, res) => {
+  try {
+    const { rows } = await query(`
+      SELECT
+        gi.id,
+        gi.product_id,
+        gi.image_type,
+        gi.angle,
+        gi.platform,
+        gi.image_url,
+        gi.upscaled_url,
+        COALESCE(gi.upscaled_url, gi.image_url) AS final_image_url,
+        COALESCE(gi.metadata->>'task_id', gi.id::text) AS task_id,
+        COALESCE(gi.metadata->>'task_kind', gi.image_type) AS task_kind,
+        gi.created_at,
+        p.name AS product_name,
+        p.category AS product_category,
+        p.original_image AS product_original_image
+      FROM generated_images gi
+      JOIN products p ON p.id = gi.product_id
+      WHERE gi.owner_id = $1
+      ORDER BY gi.created_at DESC
+    `, [req.user.id]);
+
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create product
@@ -125,17 +190,24 @@ router.post('/', upload.single('product_image'), async (req, res) => {
 router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
   const { angles, platform } = req.body;
   const angleList = angles ? JSON.parse(angles) : ['front', 'back', 'left_side', 'right_side'];
+  let productId = null;
+  let movedToProcessing = false;
+  const taskId = uuidv4();
   
   try {
     const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
     const product = products[0];
+    productId = product.id;
     
     if (!req.file) return res.status(400).json({ error: 'Model image required' });
     
     const costs = await getCreditCosts(req.user.id);
     const totalCredits = angleList.length * costs.credits_per_image;
     await ensureCreditsAvailable(req.user.id, totalCredits);
+
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', product.id]);
+    movedToProcessing = true;
     
     const results = [];
     const generationErrors = [];
@@ -147,8 +219,17 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
           const savedUrl = await saveImage(imageBuffer, req.user.id, `gen_${uuidv4()}.jpg`);
 
           const { rows } = await query(
-            'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-            [product.id, req.user.id, 'tryon', angle, savedUrl, platform || 'general', costs.credits_per_image]
+            'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+            [
+              product.id,
+              req.user.id,
+              'tryon',
+              angle,
+              savedUrl,
+              platform || 'general',
+              costs.credits_per_image,
+              JSON.stringify({ task_id: taskId, task_kind: 'tryon', angle })
+            ]
           );
           results.push(rows[0]);
         } else {
@@ -161,6 +242,8 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     }
 
     if (!results.length) throw new Error(generationErrors[0] || 'Image generation failed');
+
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', product.id]);
 
     const actualCredits = results.length * costs.credits_per_image;
     await useCredits(req.user.id, actualCredits);
@@ -178,12 +261,16 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     res.json({
       success: true,
       images: results,
+      task_id: taskId,
       credits_used: actualCredits,
       credits_per_image: costs.credits_per_image,
       generated_count: results.length,
       generation_errors: generationErrors
     });
   } catch (err) {
+    if (productId && movedToProcessing) {
+      try { await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]); } catch {}
+    }
     res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });
@@ -191,13 +278,20 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
 // Generate without model (product BG)
 router.post('/:id/generate-bg', async (req, res) => {
   const { bg_style } = req.body;
+  let productId = null;
+  let movedToProcessing = false;
+  const taskId = uuidv4();
   try {
     const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
     const product = products[0];
+    productId = product.id;
     
     const costs = await getCreditCosts(req.user.id);
     await ensureCreditsAvailable(req.user.id, costs.credits_per_image);
+
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', product.id]);
+    movedToProcessing = true;
     
     const result = await generateProductBG(product.original_image, product, bg_style || 'studio');
     if (!result.success) throw new Error('Image generation failed');
@@ -208,9 +302,19 @@ router.post('/:id/generate-bg', async (req, res) => {
     const savedUrl = await saveImage(imageBuffer, req.user.id, `bg_${uuidv4()}.jpg`);
     
     const { rows } = await query(
-      'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-      [product.id, req.user.id, 'bg_only', bg_style, savedUrl, costs.credits_per_image]
+      'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [
+        product.id,
+        req.user.id,
+        'bg_only',
+        bg_style,
+        savedUrl,
+        costs.credits_per_image,
+        JSON.stringify({ task_id: taskId, task_kind: 'bg_only', bg_style: bg_style || 'studio' })
+      ]
     );
+
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', product.id]);
     
     await query(
       'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
@@ -222,9 +326,31 @@ router.post('/:id/generate-bg', async (req, res) => {
       ]
     );
     
-    res.json({ success: true, image: rows[0], credits_used: costs.credits_per_image, credits_per_image: costs.credits_per_image });
+    res.json({ success: true, image: rows[0], task_id: taskId, credits_used: costs.credits_per_image, credits_per_image: costs.credits_per_image });
   } catch (err) {
+    if (productId && movedToProcessing) {
+      try { await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]); } catch {}
+    }
     res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
+});
+
+// Read existing listing content for a product/platform
+router.get('/:id/listing-content', async (req, res) => {
+  const platform = String(req.query.platform || 'amazon').toLowerCase();
+  try {
+    const { rows: products } = await query('SELECT id FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+
+    const { rows } = await query(
+      'SELECT * FROM amazon_flipkart_content WHERE product_id=$1 AND platform=$2 ORDER BY generated_at DESC LIMIT 1',
+      [req.params.id, platform]
+    );
+
+    if (!rows.length) return res.json({ exists: false });
+    return res.json({ exists: true, content: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -274,14 +400,74 @@ router.post('/:id/listing-content', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Product not found' });
     
     const content = await generateProductContent(rows[0], platform || 'amazon');
+    const normalizedBulletPoints = normalizeTextArray(content?.bullet_points, '\n');
+    const normalizedKeywords = normalizeTextArray(content?.keywords, ',');
     
-    await query(
-      'INSERT INTO amazon_flipkart_content (product_id, platform, title, description, bullet_points, keywords, category_path) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
-      [rows[0].id, platform, content.title, content.description, JSON.stringify(content.bullet_points), content.keywords, content.category_path]
+    const platformValue = String(platform || 'amazon').toLowerCase();
+    const { rows: existingRows } = await query(
+      'SELECT id FROM amazon_flipkart_content WHERE product_id=$1 AND platform=$2 ORDER BY generated_at DESC LIMIT 1',
+      [rows[0].id, platformValue]
     );
+
+    if (existingRows.length) {
+      await query(
+        'UPDATE amazon_flipkart_content SET title=$1, description=$2, bullet_points=$3, keywords=$4, category_path=$5, generated_at=NOW() WHERE id=$6',
+        [content.title, content.description, JSON.stringify(normalizedBulletPoints), normalizedKeywords, content.category_path, existingRows[0].id]
+      );
+    } else {
+      await query(
+        'INSERT INTO amazon_flipkart_content (product_id, platform, title, description, bullet_points, keywords, category_path) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [rows[0].id, platformValue, content.title, content.description, JSON.stringify(normalizedBulletPoints), normalizedKeywords, content.category_path]
+      );
+    }
     
     res.json(content);
   } catch (err) { res.status(getErrorStatusCode(err)).json({ error: err.message }); }
+});
+
+// Update listing content manually
+router.put('/:id/listing-content', async (req, res) => {
+  const { platform, title, description, bullet_points, keywords, category_path } = req.body;
+  const platformValue = String(platform || 'amazon').toLowerCase();
+  try {
+    const { rows: products } = await query('SELECT id FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+
+    const normalizedBulletPoints = Array.isArray(bullet_points)
+      ? bullet_points
+      : String(bullet_points || '')
+          .split('\n')
+          .map((v) => v.trim())
+          .filter(Boolean);
+
+    const normalizedKeywords = Array.isArray(keywords)
+      ? keywords
+      : String(keywords || '')
+          .split(',')
+          .map((v) => v.trim())
+          .filter(Boolean);
+
+    const { rows: existingRows } = await query(
+      'SELECT id FROM amazon_flipkart_content WHERE product_id=$1 AND platform=$2 ORDER BY generated_at DESC LIMIT 1',
+      [req.params.id, platformValue]
+    );
+
+    if (existingRows.length) {
+      await query(
+        'UPDATE amazon_flipkart_content SET title=$1, description=$2, bullet_points=$3, keywords=$4, category_path=$5, generated_at=NOW() WHERE id=$6',
+        [title || '', description || '', JSON.stringify(normalizedBulletPoints), normalizedKeywords, category_path || '', existingRows[0].id]
+      );
+    } else {
+      await query(
+        'INSERT INTO amazon_flipkart_content (product_id, platform, title, description, bullet_points, keywords, category_path) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [req.params.id, platformValue, title || '', description || '', JSON.stringify(normalizedBulletPoints), normalizedKeywords, category_path || '']
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get product images
