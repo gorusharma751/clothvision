@@ -3,15 +3,22 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const { Pool } = pg;
+const localFallbackDbUrl = 'postgresql://postgres:postgres@localhost:5432/clothvision';
+const databaseUrl = String(process.env.DATABASE_URL || localFallbackDbUrl).trim();
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/clothvision',
+  connectionString: databaseUrl,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 export const query = (text, params) => pool.query(text, params);
 
 export const initDB = async () => {
+  const isUsingLocalFallback = databaseUrl === localFallbackDbUrl;
+  if (process.env.NODE_ENV === 'production' && isUsingLocalFallback) {
+    throw new Error('DATABASE_URL is not set for production. Set a real Postgres connection string (not localhost).');
+  }
+
   const client = await pool.connect();
   try {
     await client.query(`

@@ -11,7 +11,9 @@ const startServer = async () => {
 
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   startServer().catch(err => {
-    console.error('❌ Server startup failed:', err.message);
+    console.error('❌ Server startup failed');
+    console.error(err?.message || err);
+    if (err?.stack) console.error(err.stack);
     process.exit(1);
   });
 }
