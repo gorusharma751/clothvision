@@ -18,7 +18,8 @@ const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();
 const uploadDir = path.isAbsolute(uploadDirConfig)
   ? uploadDirConfig
   : path.resolve(__dirname, uploadDirConfig);
-const frontendOrigin = String(process.env.FRONTEND_URL || '*').trim() || '*';
+const frontendOriginRaw = String(process.env.FRONTEND_URL || '*').trim() || '*';
+const frontendOrigin = frontendOriginRaw === '*' ? '*' : frontendOriginRaw.replace(/\/+$/, '');
 
 export const app = express();
 
