@@ -6,14 +6,35 @@ const isRemoteUrl = (value = '') => /^https?:\/\//i.test(String(value));
 
 const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
 
-const getApiKey = () => envVal('GEMINI_API_KEY') || envVal('GOOGLE_API_KEY');
+const isPlaceholderValue = (value = '') => {
+  const v = String(value || '').trim();
+  if (!v) return true;
+
+  const patterns = [
+    /^replace_with_/i,
+    /^your[_-]?/i,
+    /^paste[_-]?/i,
+    /^example/i,
+    /^dummy/i,
+    /your_key/i,
+    /api[_-]?key[_-]?here/i
+  ];
+
+  return patterns.some((re) => re.test(v));
+};
+
+const getApiKey = () => {
+  const candidates = [envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')];
+  const validKey = candidates.find((candidate) => !isPlaceholderValue(candidate));
+  return validKey || '';
+};
 const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
 const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
 
 const getClient = () => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    const err = new Error('Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY).');
+    const err = new Error('Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in backend/.env.local for local development.');
     err.code = 'GEMINI_KEY_MISSING';
     throw err;
   }

@@ -9,6 +9,7 @@ import AdminCredits from './pages/admin/Credits';
 import AdminSettings from './pages/admin/Settings';
 import OwnerDashboard from './pages/owner/Dashboard';
 import OwnerProducts from './pages/owner/Products';
+import OwnerGeneratedGallery from './pages/owner/GeneratedGallery';
 import OwnerCredits from './pages/owner/Credits';
 import StudioSelect from './pages/studio/StudioSelect';
 import DressStudio from './pages/studio/DressStudio';
@@ -43,6 +44,7 @@ function AppRoutes() {
       <Route path="/admin/settings" element={<Guard role="admin"><AdminSettings/></Guard>}/>
       <Route path="/owner" element={<Guard role="owner"><OwnerDashboard/></Guard>}/>
       <Route path="/owner/products" element={<Guard role="owner"><OwnerProducts/></Guard>}/>
+      <Route path="/owner/generated" element={<Guard role="owner"><OwnerGeneratedGallery/></Guard>}/>
       <Route path="/owner/credits" element={<Guard role="owner"><OwnerCredits/></Guard>}/>
       <Route path="/owner/studio" element={<Guard role="owner"><StudioSelect/></Guard>}/>
       <Route path="/owner/studio/dress" element={<Guard role="owner"><DressStudio/></Guard>}/>

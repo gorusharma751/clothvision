@@ -16,8 +16,20 @@ const normalizeRelativeUploadPath = (storedPath = '') => {
 
 export const buildUploadUrl = (storedPath) => {
   if (!storedPath) return null;
-  const value = String(storedPath);
-  if (/^https?:\/\//i.test(value) && !/\/uploads\//i.test(value)) return value;
+  const value = String(storedPath).trim();
+
+  // Keep absolute non-local URLs (e.g. Cloudinary) unchanged.
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      const pathname = String(parsed.pathname || '').replace(/\\/g, '/');
+      const isLocalUploadsPath = pathname.startsWith('/uploads/') || pathname.startsWith('/api/uploads/');
+      if (!isLocalUploadsPath) return value;
+    } catch {
+      return value;
+    }
+  }
+
   const rel = normalizeRelativeUploadPath(storedPath);
   const token = localStorage.getItem('cv_token');
   const base = `${UPLOADS_BASE_URL}/uploads/${rel}`;

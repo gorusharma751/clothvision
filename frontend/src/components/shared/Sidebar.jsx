@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight, Images } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const adminNav=[{to:'/admin',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/admin/owners',icon:Users,label:'Shop Owners'},{to:'/admin/credits',icon:CreditCard,label:'Credits'},{to:'/admin/settings',icon:Settings,label:'Settings'}];
-const ownerNav=[{to:'/owner',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/owner/studio',icon:Wand2,label:'AI Studio'},{to:'/owner/products',icon:Package,label:'Products'},{to:'/owner/credits',icon:Coins,label:'Credits'}];
+const ownerNav=[{to:'/owner',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/owner/studio',icon:Wand2,label:'AI Studio'},{to:'/owner/products',icon:Package,label:'Products'},{to:'/owner/generated',icon:Images,label:'Generated Gallery'},{to:'/owner/credits',icon:Coins,label:'Credits'}];
 const COLLAPSE_KEY = 'cv_sidebar_collapsed';
 
 export default function Sidebar() {
@@ -35,21 +35,21 @@ export default function Sidebar() {
     const showLabels = !compact || mobile;
     return (
       <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
-        <div style={{padding:'16px 12px',borderBottom:'1px solid rgba(124,58,237,.1)'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,justifyContent:showLabels?'space-between':'center'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+        <div style={{padding:compact?'16px 10px':'16px 12px',borderBottom:'1px solid rgba(124,58,237,.1)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,justifyContent:showLabels?'space-between':'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0,flex:showLabels?1:'0 1 auto',overflow:'hidden'}}>
               <div style={{width:34,height:34,borderRadius:10,background:'linear-gradient(135deg,#7c3aed,#4c1d95)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 <Sparkles size={16} color="#fff"/>
               </div>
               {showLabels && (
-                <span style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:'1.1rem',background:'linear-gradient(90deg,#a78bfa,#f0b429)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',whiteSpace:'nowrap'}}>ClothVision</span>
+                <span style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:'1.02rem',background:'linear-gradient(90deg,#a78bfa,#f0b429)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',whiteSpace:'nowrap',display:'block'}}>ClothVision</span>
               )}
             </div>
             {!mobile && (
               <button
                 onClick={toggleCollapsed}
                 title={compact ? 'Expand sidebar' : 'Collapse sidebar'}
-                style={{width:28,height:28,borderRadius:8,border:'1px solid rgba(124,58,237,.2)',background:'rgba(124,58,237,.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#a78bfa',flexShrink:0}}
+                style={{width:30,height:30,borderRadius:8,border:'1px solid rgba(124,58,237,.26)',background:'rgba(124,58,237,.12)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#a78bfa',flexShrink:0,position:'relative',zIndex:2}}
               >
                 {compact ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
               </button>
@@ -146,7 +146,7 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside style={{width:collapsed?80:220,transition:'width .25s ease',flexShrink:0,background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.12)',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100vh'}} className="hide-mobile">
+      <aside style={{width:collapsed?88:236,transition:'width .25s ease',flexShrink:0,background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.12)',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100vh'}} className="hide-mobile">
         <Content compact={collapsed}/>
       </aside>
       <button onClick={()=>setOpen(true)} style={{position:'fixed',top:12,left:12,zIndex:50,width:36,height:36,borderRadius:10,border:'1px solid rgba(124,58,237,.3)',background:'rgba(17,17,24,.9)',display:'none',alignItems:'center',justifyContent:'center',cursor:'pointer'}} className="show-mobile">
