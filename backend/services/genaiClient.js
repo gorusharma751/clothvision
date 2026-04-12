@@ -57,13 +57,16 @@ const wrapModel = (client, modelName) => ({
 
 export const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
 export const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
+export const getVertexLocation = (overrides = {}) => {
+  const locationRaw = String(overrides.location ?? envVal('GOOGLE_CLOUD_LOCATION', 'us-central1')).trim();
+  return isPlaceholderValue(locationRaw) ? 'us-central1' : locationRaw;
+};
 
-export const getClient = () => {
+export const getClient = (overrides = {}) => {
   const vertexMode = isVertexAiEnabled();
-  const projectRaw = envVal('GOOGLE_CLOUD_PROJECT');
+  const projectRaw = String(overrides.project ?? envVal('GOOGLE_CLOUD_PROJECT')).trim();
   const project = isPlaceholderValue(projectRaw) ? '' : projectRaw;
-  const locationRaw = envVal('GOOGLE_CLOUD_LOCATION', 'us-central1');
-  const location = isPlaceholderValue(locationRaw) ? 'us-central1' : locationRaw;
+  const location = getVertexLocation(overrides);
   const apiKey = getApiKey(vertexMode);
   const hasProject = Boolean(project);
   const hasApiKey = Boolean(apiKey);
