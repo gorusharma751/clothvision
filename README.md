@@ -1,6 +1,6 @@
 # ClothVision AI
 
-AI-powered fashion photography platform — Gemini se model try-on, angles, listing content.
+AI-powered fashion photography platform — Vertex AI se model try-on, angles, listing content.
 
 ---
 
@@ -39,19 +39,14 @@ Ya `CREATE_DATABASE.bat` double-click karo.
 `backend\.env` file mein yeh values set karo:
 ```
 DATABASE_URL=postgresql://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/clothvision
-GEMINI_API_KEY=AIza...your_key_here...
+GOOGLE_CLOUD_PROJECT=your_google_cloud_project_id
+GOOGLE_CLOUD_LOCATION=us-central1
+VERTEX_API_KEY=your_vertex_api_key
 ```
 
-Recommended: `backend/.env` ko deployment/shared values ke liye rakho, aur local testing ke liye `backend/.env.local` use karo.
+Single file mode use karo: local backend sirf `backend/.env` read karta hai.
 
-```powershell
-cd backend
-Copy-Item .env.local.example .env.local
-```
-
-Then edit only `backend/.env.local` for local overrides (DB host/password, localhost frontend URL).
-
-**Gemini API key FREE milti hai:** https://aistudio.google.com/app/apikey
+`backend/.env` already git-ignored hai, isliye secrets commit mein nahi jayenge.
 
 ### Step 5 — Start karo
 
@@ -97,27 +92,17 @@ Deploy the `backend/` app to any Node host (Render/Railway/Fly/etc.) and set:
 
 - `DATABASE_URL`
 - `JWT_SECRET`
-- `GEMINI_API_KEY`
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION` (recommended: `us-central1`)
+- `VERTEX_API_KEY`
 - `FRONTEND_URL` = your Vercel domain (after frontend deploy)
+- Optional: `GEMINI_TEXT_MODEL`, `GEMINI_IMAGE_MODEL`
 
-#### File-based env mode (no manual Railway variables)
+#### Env behavior
 
-If you want Railway to run from repo env files only:
-
-- Keep all keys in `backend/.env.example` (canonical key list)
-- Keep real values in `backend/.env`
-- Commit `backend/.env` so Railway deploy can read it at runtime
-- `backend/scripts/ensure-env.js` auto-adds any missing keys from `.env.example` into `.env` during `npm start` / `npm run dev`
-
-#### Local overrides without breaking live deploy
-
-- Backend now loads env in this order:
-   - `backend/.env`
-   - `backend/.env.local` (only when NODE_ENV is not production, and this file overrides `.env`)
-- `backend/.env.local` is git-ignored, so local DB/frontend settings stay local.
-- Use `backend/.env.local.example` as template.
-
-Note: committing `.env` stores secrets in git history. Use only in private repos you control.
+- Local development: backend reads `backend/.env`.
+- Live deployment: Railway environment variables should be set in Railway dashboard.
+- `backend/.env` stays local because it is git-ignored.
 
 ### 2. Configure Vercel frontend env vars
 

@@ -1,32 +1,16 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getClient, getImageModelName, getTextModelName } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
 
-const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
-
-const isPlaceholderValue = (value = '') => {
-  const v = String(value || '').trim();
-  if (!v) return true;
-  const patterns = [/^replace_with_/i, /^your[_-]?/i, /^example/i, /your_key/i, /api[_-]?key[_-]?here/i];
-  return patterns.some((re) => re.test(v));
-};
-
-const getClient = () => {
-  const candidates = [envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')];
-  const key = candidates.find((candidate) => !isPlaceholderValue(candidate));
-  if (!key) throw new Error('Missing GEMINI_API_KEY');
-  return new GoogleGenerativeAI(key);
-};
-
 const fileToBase64 = (p) => fs.readFileSync(p).toString('base64');
-const getMime = (p) => ({'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}[path.extname(p).toLowerCase()] || 'image/jpeg');
+const getMime = (p) => ({ '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(p).toLowerCase()] || 'image/jpeg');
 
 const LIGHTING_MAP = {
   soft_natural: 'soft natural daylight, gentle shadows, warm tones',
   studio_white: 'professional studio white lighting, clean bright, minimal shadows',
   golden_hour: 'warm golden hour sunlight, long soft shadows',
   dramatic: 'dramatic side lighting, strong contrast, moody atmosphere',
-  flat: 'flat even lighting, no harsh shadows, e-commerce style',
+  flat: 'flat even lighting, no harsh shadows, e-commerce style'
 };
 
 const SURFACE_MAP = {
@@ -36,7 +20,7 @@ const SURFACE_MAP = {
   car_dashboard: 'placed on a car dashboard, inside vehicle interior',
   car_seat: 'placed on a car seat',
   bed: 'placed on a bed or sofa',
-  custom: '',
+  custom: ''
 };
 
 const FORMAT_SIZE = {
@@ -44,12 +28,11 @@ const FORMAT_SIZE = {
   amazon_rect: { ratio: '4:3', desc: 'landscape 4:3 ratio' },
   instagram: { ratio: '1:1', desc: 'square 1080x1080' },
   story: { ratio: '9:16', desc: 'vertical portrait 9:16' },
-  banner: { ratio: '16:9', desc: 'wide landscape banner 16:9' },
+  banner: { ratio: '16:9', desc: 'wide landscape banner 16:9' }
 };
 
 export const generateProductScene = async (productImagePath, backgroundImagePath, config) => {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image') });
+  const imageModelName = getImageModelName();
 
   const productData = fileToBase64(productImagePath);
   const productMime = getMime(productImagePath);
@@ -67,7 +50,7 @@ export const generateProductScene = async (productImagePath, backgroundImagePath
   const position = config.product_position === 'left' ? 'left side of frame' : config.product_position === 'right' ? 'right side of frame' : 'center of frame';
 
   const bgInstruction = backgroundImagePath
-    ? `USE THE PROVIDED BACKGROUND IMAGE EXACTLY — keep all background elements, colors, textures, and composition from it. Place the product naturally into this specific background scene.`
+    ? 'USE THE PROVIDED BACKGROUND IMAGE EXACTLY - keep all background elements, colors, textures, and composition from it. Place the product naturally into this specific background scene.'
     : `Create a beautiful, professional ${config.platform || 'e-commerce'} product background that matches the product's style and color palette.`;
 
   const prompt = `You are a professional ${config.platform || 'e-commerce'} product photographer and scene composer.
@@ -75,7 +58,7 @@ export const generateProductScene = async (productImagePath, backgroundImagePath
 TASK: Create a stunning product scene image for ${config.platform?.toUpperCase() || 'FLIPKART'} listing.
 
 PRODUCT: "${config.product_name}" (${config.product_category})
-PRODUCT RULE: Keep the product EXACTLY as shown — same color, design, shape, texture, branding, ALL details preserved 100%. Do NOT alter the product in any way.
+PRODUCT RULE: Keep the product EXACTLY as shown - same color, design, shape, texture, branding, ALL details preserved 100%. Do NOT alter the product in any way.
 
 SCENE SETUP:
 - Surface/Placement: Product is ${surface}
@@ -96,7 +79,7 @@ QUALITY: High resolution, professional product photography, sharp focus on produ
 Generate the product scene image now.`;
 
   const parts = [
-    { inlineData: { data: productData, mimeType: productMime } },
+    { inlineData: { data: productData, mimeType: productMime } }
   ];
 
   if (backgroundImagePath) {
@@ -107,15 +90,16 @@ Generate the product scene image now.`;
 
   parts.push({ text: prompt });
 
-  const results = [];
-
-  try {
+  const runGeneration = async () => {
+    const genAI = getClient();
+    const model = genAI.getGenerativeModel({ model: imageModelName });
     const result = await model.generateContent(parts);
     const response = result.response;
+    const generated = [];
 
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) {
-        results.push({
+        generated.push({
           imageData: part.inlineData.data,
           mimeType: part.inlineData.mimeType,
           format: config.output_format,
@@ -124,18 +108,38 @@ Generate the product scene image now.`;
         break;
       }
     }
-  } catch (err) {
-    console.error('Scene generation error:', err.message);
-    throw new Error(`Scene generation failed: ${err.message}`);
-  }
 
-  return results;
+    return generated;
+  };
+
+  try {
+    return await runGeneration();
+  } catch (primaryErr) {
+    const error = primaryErr;
+    const raw = error?.message || String(error || 'Scene generation failed');
+    const isModelUnavailable = /Publisher Model .* was not found|NOT_FOUND|does not have access to it|not supported for generateContent/i.test(raw);
+
+    console.error('Scene generation error:', raw);
+
+    const wrapped = new Error(`Scene generation failed: ${raw}`);
+    wrapped.code = error?.code || 'GEMINI_REQUEST_FAILED';
+
+    if (/RESOURCE_EXHAUSTED|resource exhausted|"code"\s*:\s*429/i.test(raw)) {
+      wrapped.code = 'GEMINI_QUOTA_EXCEEDED';
+      wrapped.message = 'Scene generation failed: Vertex AI quota exhausted (429). Please retry later or increase quota/billing.';
+    } else if (isModelUnavailable) {
+      wrapped.code = 'GEMINI_MODEL_UNAVAILABLE';
+      wrapped.message = `Scene generation failed: ${imageModelName} is unavailable in the configured Vertex region. Set GOOGLE_CLOUD_LOCATION=us-central1 (recommended) or use a supported model.`;
+    }
+
+    throw wrapped;
+  }
 };
 
 // Generate AI prompt suggestion based on product + background
 export const generateScenePrompt = async (productDetails, bgDescription) => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite') });
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
 
   const prompt = `You are a product photography expert. Suggest the best scene setup for this product listing.
 

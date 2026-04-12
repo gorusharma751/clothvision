@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, Plus, X, Sparkles, RefreshCw, Copy, Check, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
-import api, { getImageUrl } from '../../utils/api';
+import api from '../../utils/api';
+import { buildUploadUrl } from '../../utils/uploads';
+import Layout from '../../components/shared/Layout';
 
 /* ── ImageBox ── */
 function ImageBox({ preview, onFile, onRemove, label, sublabel, accent = '#7c3aed', required }) {
-  const onDrop = useCallback(f => { if (f[0]) onFile(f[0]); }, [onFile]);
+  const onDrop = useCallback(f => { if (f[0]) onFile(f[0]); }, [onFile]);       
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { 'image/*': [] }, maxFiles: 1 });
   const c = isDragActive ? `${accent}` : preview ? `${accent}66` : `${accent}33`;
   return (
@@ -24,7 +26,7 @@ function ImageBox({ preview, onFile, onRemove, label, sublabel, accent = '#7c3ae
           <div style={{ width: 38, height: 38, borderRadius: 11, background: `${accent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
             <Plus size={17} color={`${accent}99`} />
           </div>
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(226,226,240,.55)' }}>{label}{required && <span style={{ color: '#f87171' }}> *</span>}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'rgba(226,226,240,.55)' }}>{label}{required && <span style={{ color: '#f87171' }}> *</span>}</p>    
           {sublabel && <p style={{ fontSize: 10, color: `${accent}55`, marginTop: 3 }}>{sublabel}</p>}
         </div>
       )}
@@ -73,7 +75,7 @@ export default function SceneBuilder() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    api.get('/scene/presets').then(r => setPresets(r.data)).catch(() => {});
+    api.get('/scene/presets').then(r => setPresets(r.data)).catch(() => {});    
   }, []);
 
   const getAiSuggestion = async () => {
@@ -82,7 +84,7 @@ export default function SceneBuilder() {
     try {
       const r = await api.post('/scene/suggest', { product_name: productName, product_category: productCategory, bg_description: bgPreview ? 'custom background provided' : 'no background' });
       setAiSuggestion(r.data);
-      if (r.data.suggested_surface) setSurfaceType(r.data.suggested_surface);
+      if (r.data.suggested_surface) setSurfaceType(r.data.suggested_surface);   
       if (r.data.suggested_lighting) setLightingStyle(r.data.suggested_lighting);
       if (r.data.suggested_props) setSelectedProps(r.data.suggested_props.slice(0, 3));
       if (r.data.custom_prompt) setCustomPrompt(r.data.custom_prompt);
@@ -114,16 +116,16 @@ export default function SceneBuilder() {
       const r = await api.post('/scene/generate', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setResults(r.data.images || []);
       setStep(3);
-      toast.success(`Scene generated! Used ${r.data.credits_used} credits.`);
+      toast.success(`Scene generated! Used ${r.data.credits_used} credits.`);   
     } catch (err) {
       if (err.response?.data?.error === 'Insufficient credits') toast.error('Not enough credits! Request more.');
-      else toast.error(err.response?.data?.error || 'Generation failed');
+      else toast.error(err.response?.data?.error || 'Generation failed');       
     } finally { setGenerating(false); }
   };
 
   const download = (url) => {
     const a = document.createElement('a');
-    a.href = url.startsWith('http') ? url : getImageUrl(url);
+    a.href = buildUploadUrl(url);
     a.download = `scene_${Date.now()}.jpg`;
     a.click();
   };
@@ -138,6 +140,7 @@ export default function SceneBuilder() {
   ];
 
   return (
+    <Layout contentPadding={0}>
     <div style={{ minHeight: '100vh', background: '#0a0a0f' }}>
       {/* Header */}
       <div style={{ position: 'sticky', top: 0, zIndex: 20, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(10,10,15,.95)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(240,180,41,.1)' }}>
@@ -160,13 +163,13 @@ export default function SceneBuilder() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>   
         {/* Step indicators */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
           {STEPS.map((s, i) => (
             <React.Fragment key={i}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: i < step ? 'pointer' : 'default' }} onClick={() => i < step && setStep(i)}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: i < step ? 'rgba(34,197,94,.2)' : i === step ? 'rgba(240,180,41,.2)' : 'rgba(30,30,45,.5)', color: i < step ? '#4ade80' : i === step ? '#f0b429' : 'rgba(162,140,250,.3)', border: `1px solid ${i < step ? 'rgba(34,197,94,.3)' : i === step ? 'rgba(240,180,41,.4)' : 'rgba(124,58,237,.1)'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: i < step ? 'pointer' : 'default' }} onClick={() => i < step && setStep(i)}>  
+                <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: i < step ? 'rgba(34,197,94,.2)' : i === step ? 'rgba(240,180,41,.2)' : 'rgba(30,30,45,.5)', color: i < step ? '#4ade80' : i === step ? '#f0b429' : 'rgba(162,140,250,.3)', border: `1px solid ${i < step ? 'rgba(34,197,94,.3)' : i === step ? 'rgba(240,180,41,.4)' : 'rgba(124,58,237,.1)'}` }}>        
                   {i < step ? '✓' : i + 1}
                 </div>
                 <span style={{ fontSize: 12, fontWeight: i === step ? 600 : 400, color: i === step ? '#f0b429' : 'rgba(162,140,250,.35)' }}>{s}</span>
@@ -214,7 +217,7 @@ export default function SceneBuilder() {
                 <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, color: '#fff', fontSize: '1.2rem' }}>Scene Setup</h2>
                 <p style={{ color: 'rgba(162,140,250,.4)', fontSize: '.85rem' }}>Where should the product be placed?</p>
               </div>
-              <button onClick={getAiSuggestion} disabled={loadingSuggestion} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.1)', color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={getAiSuggestion} disabled={loadingSuggestion} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.1)', color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>  
                 {loadingSuggestion ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 AI Suggest
               </button>
@@ -224,7 +227,7 @@ export default function SceneBuilder() {
               <div style={{ background: 'rgba(124,58,237,.06)', border: '1px solid rgba(124,58,237,.2)', borderRadius: 12, padding: '12px 16px', marginBottom: 20 }}>
                 <p style={{ fontSize: 12, color: '#a78bfa', fontWeight: 600, marginBottom: 4 }}>✨ AI Suggestion</p>
                 <p style={{ fontSize: 12, color: 'rgba(162,140,250,.7)' }}>{aiSuggestion.scene_description}</p>
-                {aiSuggestion.platform_tip && <p style={{ fontSize: 11, color: 'rgba(240,180,41,.6)', marginTop: 4 }}>💡 {aiSuggestion.platform_tip}</p>}
+                {aiSuggestion.platform_tip && <p style={{ fontSize: 11, color: 'rgba(240,180,41,.6)', marginTop: 4 }}>💡 {aiSuggestion.platform_tip}</p>}       
               </div>
             )}
 
@@ -252,9 +255,9 @@ export default function SceneBuilder() {
             {/* Props */}
             <div>
               <p style={{ fontSize: 11, color: 'rgba(240,180,41,.5)', marginBottom: 10, fontFamily: 'Syne,sans-serif', letterSpacing: '.1em' }}>ADD PROPS (optional)</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>       
                 {(presets?.prop_items || []).map(p => (
-                  <Chip key={p.id} label={p.label} emoji={p.emoji} selected={selectedProps.includes(p.id)} onClick={() => toggleProp(p.id)} color="#f0b429" />
+                  <Chip key={p.id} label={p.label} emoji={p.emoji} selected={selectedProps.includes(p.id)} onClick={() => toggleProp(p.id)} color="#f0b429" />  
                 ))}
               </div>
               {selectedProps.length > 0 && <p style={{ fontSize: 11, color: 'rgba(240,180,41,.4)', marginTop: 8 }}>{selectedProps.length} prop{selectedProps.length !== 1 ? 's' : ''} selected</p>}
@@ -277,7 +280,7 @@ export default function SceneBuilder() {
                         <p style={{ fontSize: 12, fontWeight: outputFormat === f.id ? 600 : 400, color: outputFormat === f.id ? '#f0b429' : 'rgba(226,226,240,.6)' }}>{f.label}</p>
                         <p style={{ fontSize: 10, color: 'rgba(162,140,250,.35)' }}>{f.desc}</p>
                       </div>
-                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 8, background: 'rgba(124,58,237,.1)', color: '#a78bfa' }}>{f.size}</span>
+                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 8, background: 'rgba(124,58,237,.1)', color: '#a78bfa' }}>{f.size}</span>  
                     </div>
                   ))}
                 </div>
@@ -287,7 +290,7 @@ export default function SceneBuilder() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 18 }}>
                   <p style={{ fontSize: 11, color: 'rgba(240,180,41,.5)', marginBottom: 10, fontFamily: 'Syne,sans-serif', letterSpacing: '.1em' }}>LIGHTING</p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>   
                     {lightingOptions.map(l => (
                       <Chip key={l.id} label={l.label} emoji={l.emoji} selected={lightingStyle === l.id} onClick={() => setLightingStyle(l.id)} color="#f0b429" />
                     ))}
@@ -331,7 +334,7 @@ export default function SceneBuilder() {
         {step === 3 && (
           <div style={{ animation: 'fadeUp .4s ease' }}>
             {generating ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>       
                 <div style={{ width: 64, height: 64, borderRadius: '50%', border: '3px solid rgba(240,180,41,.2)', borderTopColor: '#f0b429', animation: 'spin .8s linear infinite', margin: '0 auto 20px' }} />
                 <p style={{ fontFamily: 'Syne,sans-serif', fontWeight: 600, color: '#fff', fontSize: '1.1rem', marginBottom: 8 }}>Building your product scene...</p>
                 <p style={{ color: 'rgba(162,140,250,.4)', fontSize: '.85rem' }}>Product details preserved exactly</p>
@@ -346,7 +349,7 @@ export default function SceneBuilder() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
                   {results.map((img, i) => {
-                    const imgUrl = img.url?.startsWith('http') ? img.url : getImageUrl(img.url);
+                    const imgUrl = buildUploadUrl(img.url);
                     return (
                       <div key={i} style={{ borderRadius: 14, overflow: 'hidden', background: 'rgba(240,180,41,.04)', border: '1px solid rgba(240,180,41,.12)' }}>
                         <div style={{ aspectRatio: outputFormat === 'story' ? '9/16' : outputFormat === 'banner' ? '16/9' : '1/1', overflow: 'hidden', background: '#111' }}>
@@ -365,13 +368,13 @@ export default function SceneBuilder() {
                     );
                   })}
                 </div>
-                <div style={{ marginTop: 20, padding: 16, borderRadius: 12, background: 'rgba(34,197,94,.05)', border: '1px solid rgba(34,197,94,.15)' }}>
+                <div style={{ marginTop: 20, padding: 16, borderRadius: 12, background: 'rgba(34,197,94,.05)', border: '1px solid rgba(34,197,94,.15)' }}>      
                   <p style={{ fontSize: 12, color: '#4ade80', fontWeight: 600, marginBottom: 4 }}>✅ Ready for {platform.charAt(0).toUpperCase() + platform.slice(1)} listing!</p>
-                  <p style={{ fontSize: 11, color: 'rgba(162,140,250,.5)' }}>Download images and upload directly to your {platform} product listing.</p>
+                  <p style={{ fontSize: 11, color: 'rgba(162,140,250,.5)' }}>Download images and upload directly to your {platform} product listing.</p>        
                 </div>
               </>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>       
                 <p style={{ color: 'rgba(162,140,250,.4)', marginBottom: 16 }}>Ready to generate</p>
                 <button onClick={generate} className="btn-gold"><Wand2 size={16} />Generate Scene</button>
               </div>
@@ -381,7 +384,7 @@ export default function SceneBuilder() {
 
         {/* Navigation */}
         {step < 3 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(240,180,41,.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(240,180,41,.08)' }}>        
             <button onClick={() => step === 0 ? nav('/owner/studio') : setStep(s => s - 1)} className="btn-ghost">
               <ArrowLeft size={14} />Back
             </button>
@@ -401,5 +404,6 @@ export default function SceneBuilder() {
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
     </div>
+    </Layout>
   );
 }

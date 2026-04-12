@@ -52,7 +52,7 @@ const ensureCreditsAvailable = async (userId, amount) => {
 const getErrorStatusCode = (err) => {
   if (err.message === 'Insufficient credits') return 402;
   if (err.code === 'GEMINI_QUOTA_EXCEEDED') return 503;
-  if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST'].includes(err.code)) return 502;
+  if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST', 'GEMINI_BAD_RESPONSE_FORMAT', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(err.code)) return 502;
   return 500;
 };
 
@@ -495,7 +495,7 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
       productDetails
     );
 
-    if (!results.length) throw new Error('No try-on images generated. Check Gemini quota/billing and retry.');
+    if (!results.length) throw new Error('No try-on images generated. Check Vertex AI quota/billing and retry.');
     
     const savedImages = [];
     for (const r of results) {

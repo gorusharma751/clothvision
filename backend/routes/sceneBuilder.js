@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../database.js';
 import { authenticate } from '../middleware/auth.js';
 import { generateProductScene, generateScenePrompt } from '../services/sceneBuilderAgent.js';
-import { uploadToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
+import { uploadToCloudinary, uploadFileToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -39,10 +39,34 @@ const saveImage = async (buffer, userId, filename) => {
   return outPath;
 };
 
+const saveUploadedFile = async (filePath, userId) => {
+  if (isCloudinaryEnabled()) {
+    try {
+      const cloudUrl = await uploadFileToCloudinary(filePath, { folder: `clothvision/${userId}/uploads` });
+      if (cloudUrl) return cloudUrl;
+    } catch (err) {
+      console.error('Cloudinary upload failed, falling back to local file:', err.message);
+    }
+  }
+
+  return filePath;
+};
+
+const ensureCreditsAvailable = async (userId, amount) => {
+  const { rows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [userId]);
+  if (!rows.length || rows[0].balance < amount) throw new Error('Insufficient credits');
+};
+
 const useCredits = async (userId, amount) => {
   const { rows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [userId]);
   if (!rows.length || rows[0].balance < amount) throw new Error('Insufficient credits');
   await query('UPDATE credits SET balance=balance-$1, total_used=total_used+$1, updated_at=NOW() WHERE owner_id=$2', [amount, userId]);
+};
+
+const parseBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 };
 
 // Get scene presets
@@ -86,6 +110,11 @@ router.post('/generate',
     { name: 'background_image', maxCount: 1 }
   ]),
   async (req, res) => {
+    let productId = null;
+    let movedToProcessing = false;
+    const sceneCreditCost = 2;
+    const taskId = uuidv4();
+
     try {
       const {
         product_name, product_category, surface_type, surface_description,
@@ -97,16 +126,24 @@ router.post('/generate',
         return res.status(400).json({ error: 'Product image required' });
       }
 
-      // Check credits (2 per scene)
-      const { rows: creditRows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [req.user.id]);
-      const balance = creditRows[0]?.balance || 0;
-      if (balance < 2) return res.status(402).json({ error: 'Insufficient credits. Need 2 credits per scene.' });
+      await ensureCreditsAvailable(req.user.id, sceneCreditCost);
 
       const productImagePath = req.files.product_image[0].path;
       const backgroundImagePath = req.files?.background_image?.[0]?.path || null;
 
       let parsedProps = [];
-      try { parsedProps = JSON.parse(selected_props || '[]'); } catch {}
+      if (Array.isArray(selected_props)) {
+        parsedProps = selected_props.map((value) => String(value || '').trim()).filter(Boolean);
+      } else {
+        try {
+          parsedProps = JSON.parse(selected_props || '[]');
+        } catch {
+          parsedProps = String(selected_props || '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean);
+        }
+      }
 
       const sceneConfig = {
         product_name: product_name || 'Product',
@@ -118,7 +155,7 @@ router.post('/generate',
         custom_prompt: custom_prompt || '',
         lighting_style: lighting_style || 'soft_natural',
         product_position: product_position || 'center',
-        show_shadow: show_shadow === 'true',
+        show_shadow: parseBoolean(show_shadow, true),
         platform: platform || 'flipkart'
       };
 
@@ -129,37 +166,105 @@ router.post('/generate',
       );
 
       if (!results.length) {
-        return res.status(500).json({ error: 'Scene generation failed. Check Gemini API key and quota.' });
+        return res.status(500).json({ error: 'Scene generation failed. Check Vertex AI key and quota.' });
       }
 
-      await useCredits(req.user.id, 2);
+      const storedProductImage = await saveUploadedFile(productImagePath, req.user.id);
+      const storedBackgroundImage = backgroundImagePath
+        ? await saveUploadedFile(backgroundImagePath, req.user.id)
+        : null;
+
+      const descriptionParts = [
+        sceneConfig.surface_description,
+        sceneConfig.custom_prompt
+      ].map((value) => String(value || '').trim()).filter(Boolean);
+
+      const { rows: productRows } = await query(
+        'INSERT INTO products (owner_id, name, category, description, original_image, status, updated_at) VALUES ($1,$2,$3,$4,$5,$6,NOW()) RETURNING *',
+        [
+          req.user.id,
+          sceneConfig.product_name || 'Scene Product',
+          sceneConfig.product_category || 'item',
+          descriptionParts.join(' | ') || null,
+          storedProductImage,
+          'processing'
+        ]
+      );
+
+      const product = productRows[0];
+      productId = product.id;
+      movedToProcessing = true;
 
       const savedImages = [];
-      for (const r of results) {
+      for (let index = 0; index < results.length; index += 1) {
+        const r = results[index];
         const buf = Buffer.from(r.imageData, 'base64');
         const savedUrl = await saveImage(buf, req.user.id, `scene_${uuidv4()}.jpg`);
+
+        await query(
+          'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+          [
+            product.id,
+            req.user.id,
+            'scene',
+            r.format || sceneConfig.output_format,
+            savedUrl,
+            sceneConfig.platform,
+            index === 0 ? sceneCreditCost : 0,
+            JSON.stringify({
+              task_id: taskId,
+              task_kind: 'scene_builder',
+              variant: r.variant || `variant_${index + 1}`,
+              format: r.format || sceneConfig.output_format,
+              surface_type: sceneConfig.surface_type,
+              lighting_style: sceneConfig.lighting_style,
+              source: 'scene_builder'
+            })
+          ]
+        );
+
         savedImages.push({
           url: savedUrl,
-          format: r.format,
-          variant: r.variant
+          format: r.format || sceneConfig.output_format,
+          variant: r.variant || `variant_${index + 1}`
         });
       }
 
       // Save to DB
       await query(
         'INSERT INTO scene_builds (owner_id, product_image, background_image, config, result_images, credits_used) VALUES ($1,$2,$3,$4,$5,$6)',
-        [req.user.id, productImagePath, backgroundImagePath, JSON.stringify(sceneConfig), JSON.stringify(savedImages), 2]
+        [req.user.id, storedProductImage, storedBackgroundImage, JSON.stringify(sceneConfig), JSON.stringify(savedImages), sceneCreditCost]
       );
+
+      await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', product.id]);
+
+      await useCredits(req.user.id, sceneCreditCost);
 
       await query(
         'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
-        [req.user.id, 'use', 2, `Scene build: ${product_name || 'Product'}`]
+        [req.user.id, 'use', sceneCreditCost, `Scene build: ${sceneConfig.product_name || 'Product'}`]
       );
 
-      res.json({ success: true, images: savedImages, credits_used: 2 });
+      res.json({
+        success: true,
+        product_id: product.id,
+        images: savedImages,
+        credits_used: sceneCreditCost,
+        task_id: taskId
+      });
 
     } catch (err) {
-      const status = err.message === 'Insufficient credits' ? 402 : 500;
+      if (productId && movedToProcessing) {
+        try {
+          await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]);
+        } catch {
+          // Keep original error response if status update also fails.
+        }
+      }
+      let status = 500;
+      if (err.message === 'Insufficient credits') status = 402;
+      else if (err.code === 'GEMINI_QUOTA_EXCEEDED') status = 503;
+      else if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST', 'GEMINI_BAD_RESPONSE_FORMAT', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(err.code)) status = 502;
       res.status(status).json({ error: err.message });
     }
   }
