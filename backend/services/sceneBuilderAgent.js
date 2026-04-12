@@ -19,14 +19,14 @@ const getClient = () => {
 };
 
 const fileToBase64 = (p) => fs.readFileSync(p).toString('base64');
-const getMime = (p) => ({'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}[path.extname(p).toLowerCase()] || 'image/jpeg');
+const getMime = (p) => ({ '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(p).toLowerCase()] || 'image/jpeg');
 
 const LIGHTING_MAP = {
   soft_natural: 'soft natural daylight, gentle shadows, warm tones',
   studio_white: 'professional studio white lighting, clean bright, minimal shadows',
   golden_hour: 'warm golden hour sunlight, long soft shadows',
   dramatic: 'dramatic side lighting, strong contrast, moody atmosphere',
-  flat: 'flat even lighting, no harsh shadows, e-commerce style',
+  flat: 'flat even lighting, no harsh shadows, e-commerce style'
 };
 
 const SURFACE_MAP = {
@@ -36,7 +36,7 @@ const SURFACE_MAP = {
   car_dashboard: 'placed on a car dashboard, inside vehicle interior',
   car_seat: 'placed on a car seat',
   bed: 'placed on a bed or sofa',
-  custom: '',
+  custom: ''
 };
 
 const FORMAT_SIZE = {
@@ -44,7 +44,7 @@ const FORMAT_SIZE = {
   amazon_rect: { ratio: '4:3', desc: 'landscape 4:3 ratio' },
   instagram: { ratio: '1:1', desc: 'square 1080x1080' },
   story: { ratio: '9:16', desc: 'vertical portrait 9:16' },
-  banner: { ratio: '16:9', desc: 'wide landscape banner 16:9' },
+  banner: { ratio: '16:9', desc: 'wide landscape banner 16:9' }
 };
 
 export const generateProductScene = async (productImagePath, backgroundImagePath, config) => {
@@ -67,7 +67,7 @@ export const generateProductScene = async (productImagePath, backgroundImagePath
   const position = config.product_position === 'left' ? 'left side of frame' : config.product_position === 'right' ? 'right side of frame' : 'center of frame';
 
   const bgInstruction = backgroundImagePath
-    ? `USE THE PROVIDED BACKGROUND IMAGE EXACTLY — keep all background elements, colors, textures, and composition from it. Place the product naturally into this specific background scene.`
+    ? 'USE THE PROVIDED BACKGROUND IMAGE EXACTLY - keep all background elements, colors, textures, and composition from it. Place the product naturally into this specific background scene.'
     : `Create a beautiful, professional ${config.platform || 'e-commerce'} product background that matches the product's style and color palette.`;
 
   const prompt = `You are a professional ${config.platform || 'e-commerce'} product photographer and scene composer.
@@ -75,7 +75,7 @@ export const generateProductScene = async (productImagePath, backgroundImagePath
 TASK: Create a stunning product scene image for ${config.platform?.toUpperCase() || 'FLIPKART'} listing.
 
 PRODUCT: "${config.product_name}" (${config.product_category})
-PRODUCT RULE: Keep the product EXACTLY as shown — same color, design, shape, texture, branding, ALL details preserved 100%. Do NOT alter the product in any way.
+PRODUCT RULE: Keep the product EXACTLY as shown - same color, design, shape, texture, branding, ALL details preserved 100%. Do NOT alter the product in any way.
 
 SCENE SETUP:
 - Surface/Placement: Product is ${surface}
@@ -96,7 +96,7 @@ QUALITY: High resolution, professional product photography, sharp focus on produ
 Generate the product scene image now.`;
 
   const parts = [
-    { inlineData: { data: productData, mimeType: productMime } },
+    { inlineData: { data: productData, mimeType: productMime } }
   ];
 
   if (backgroundImagePath) {
