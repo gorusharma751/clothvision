@@ -2,8 +2,6 @@ import { GoogleGenAI } from '@google/genai';
 
 export const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
 
-const isTruthy = (value = '') => /^(1|true|yes|on)$/i.test(String(value || '').trim());
-
 export const isPlaceholderValue = (value = '') => {
   const v = String(value || '').trim();
   if (!v) return true;
@@ -21,19 +19,35 @@ export const isPlaceholderValue = (value = '') => {
   return patterns.some((re) => re.test(v));
 };
 
-export const isVertexAiEnabled = () => {
-  const provider = envVal('GEMINI_PROVIDER').toLowerCase();
-  if (provider === 'vertex' || provider === 'vertexai') return true;
-  if (provider === 'studio' || provider === 'aistudio' || provider === 'gemini') return false;
-  return isTruthy(envVal('GOOGLE_GENAI_USE_VERTEXAI'));
-};
+export const isVertexAiEnabled = () => true;
 
-const getApiKey = (vertexMode) => {
-  const candidates = vertexMode
-    ? [envVal('VERTEX_API_KEY'), envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')]
-    : [envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')];
+const KNOWN_VERTEX_LOCATIONS = new Set([
+  'us-central1',
+  'us-east1',
+  'us-east4',
+  'us-west1',
+  'us-west4',
+  'northamerica-northeast1',
+  'southamerica-east1',
+  'europe-west1',
+  'europe-west2',
+  'europe-west3',
+  'europe-west4',
+  'europe-west6',
+  'europe-west9',
+  'asia-east1',
+  'asia-east2',
+  'asia-northeast1',
+  'asia-northeast3',
+  'asia-south1',
+  'asia-south2',
+  'asia-southeast1',
+  'australia-southeast1'
+]);
 
-  return candidates.find((candidate) => !isPlaceholderValue(candidate)) || '';
+const getApiKey = () => {
+  const apiKey = envVal('VERTEX_API_KEY');
+  return isPlaceholderValue(apiKey) ? '' : apiKey;
 };
 
 const toLegacyResponse = (response) => {
@@ -44,10 +58,19 @@ const toLegacyResponse = (response) => {
   };
 };
 
-const wrapModel = (client, modelName) => ({
+const resolveVertexModelPath = (modelName, project, location) => {
+  const name = String(modelName || '').trim();
+  if (!name) return name;
+  if (name.includes('/')) return name;
+  if (!project) return name;
+  return `projects/${project}/locations/${location}/publishers/google/models/${name}`;
+};
+
+const wrapModel = (client, modelName, context = {}) => ({
   generateContent: async (contents) => {
+    const resolvedModel = resolveVertexModelPath(modelName, context.project, context.location);
     const response = await client.models.generateContent({
-      model: modelName,
+      model: resolvedModel,
       contents
     });
 
@@ -58,56 +81,46 @@ const wrapModel = (client, modelName) => ({
 export const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
 export const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
 export const getVertexLocation = (overrides = {}) => {
-  const locationRaw = String(overrides.location ?? envVal('GOOGLE_CLOUD_LOCATION', 'us-central1')).trim();
-  return isPlaceholderValue(locationRaw) ? 'us-central1' : locationRaw;
+  const locationRaw = String(overrides.location ?? envVal('GOOGLE_CLOUD_LOCATION', 'us-central1')).trim().toLowerCase();
+  if (!locationRaw || isPlaceholderValue(locationRaw)) return 'us-central1';
+  return KNOWN_VERTEX_LOCATIONS.has(locationRaw) ? locationRaw : 'us-central1';
 };
 
 export const getClient = (overrides = {}) => {
-  const vertexMode = isVertexAiEnabled();
   const projectRaw = String(overrides.project ?? envVal('GOOGLE_CLOUD_PROJECT')).trim();
   const project = isPlaceholderValue(projectRaw) ? '' : projectRaw;
   const location = getVertexLocation(overrides);
-  const apiKey = getApiKey(vertexMode);
+  const apiKey = getApiKey();
   const hasProject = Boolean(project);
   const hasApiKey = Boolean(apiKey);
   const hasAdc = Boolean(envVal('GOOGLE_APPLICATION_CREDENTIALS'));
 
-  if (vertexMode && !hasApiKey && !hasProject) {
-    const err = new Error('Vertex AI is enabled but GOOGLE_CLOUD_PROJECT is missing.');
+  if (!hasApiKey && !hasProject) {
+    const err = new Error('Vertex AI config missing. Set VERTEX_API_KEY or GOOGLE_CLOUD_PROJECT in backend/.env or Railway variables.');
     err.code = 'GEMINI_VERTEX_CONFIG_MISSING';
     throw err;
   }
 
-  if (!vertexMode && !apiKey) {
-    const err = new Error('Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in backend/.env.local.');
-    err.code = 'GEMINI_KEY_MISSING';
-    throw err;
-  }
-
-  if (vertexMode && !hasApiKey && hasProject && !hasAdc) {
+  if (!hasApiKey && hasProject && !hasAdc) {
     const err = new Error('Vertex AI is enabled but no VERTEX_API_KEY and no GOOGLE_APPLICATION_CREDENTIALS were found.');
     err.code = 'GEMINI_KEY_MISSING';
     throw err;
   }
 
-  const options = { vertexai: vertexMode };
+  const options = { vertexai: true };
 
-  if (vertexMode) {
-    // SDK requires either API key OR project/location in Vertex mode (not both).
-    if (hasApiKey) {
-      options.apiKey = apiKey;
-    } else {
-      options.project = project;
-      options.location = location;
-    }
-  } else if (hasApiKey) {
+  // SDK requires either API key OR project/location in Vertex mode (not both).
+  if (hasApiKey) {
     options.apiKey = apiKey;
+  } else {
+    options.project = project;
+    options.location = location;
   }
 
   const client = new GoogleGenAI(options);
 
   return {
-    provider: vertexMode ? 'vertex' : 'gemini',
-    getGenerativeModel: ({ model }) => wrapModel(client, model)
+    provider: 'vertex',
+    getGenerativeModel: ({ model }) => wrapModel(client, model, { project, location })
   };
 };
