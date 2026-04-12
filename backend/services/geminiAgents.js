@@ -1,20 +1,20 @@
-import { getClient, getImageModelName, getTextModelName, isVertexAiEnabled } from './genaiClient.js';
+import { getClient, getImageModelName, getTextModelName } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
 
 const isRemoteUrl = (value = '') => /^https?:\/\//i.test(String(value));
 
-const getProviderLabel = () => (isVertexAiEnabled() ? 'Vertex AI' : 'Gemini API (AI Studio)');
+const getProviderLabel = () => 'Vertex AI';
 
 const normalizeGeminiError = (error) => {
   if (['GEMINI_KEY_MISSING', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(error?.code)) {
     return error;
   }
 
-  const raw = error?.message || String(error || 'Gemini request failed');
+  const raw = error?.message || String(error || 'Vertex request failed');
 
   if (/reported as leaked|key was reported as leaked|key is revoked|key has been disabled/i.test(raw)) {
-    const err = new Error('Gemini API key is revoked (reported leaked). Create a new key and update your local env values.');
+    const err = new Error('Vertex API key is revoked (reported leaked). Create a new key and update your local env values.');
     err.code = 'GEMINI_KEY_REVOKED';
     return err;
   }
@@ -32,7 +32,7 @@ const normalizeGeminiError = (error) => {
   }
 
   if (/404 Not Found|is not found for API version|not supported for generateContent/i.test(raw)) {
-    const err = new Error(`Configured Gemini model is unavailable on ${getProviderLabel()}. Update GEMINI_TEXT_MODEL/GEMINI_IMAGE_MODEL.`);
+    const err = new Error(`Configured model is unavailable on ${getProviderLabel()}. Update GEMINI_TEXT_MODEL/GEMINI_IMAGE_MODEL.`);
     err.code = 'GEMINI_MODEL_UNAVAILABLE';
     return err;
   }
@@ -44,90 +44,14 @@ const normalizeGeminiError = (error) => {
   }
 
   if (/400 Bad Request/i.test(raw)) {
-    const err = new Error(`Gemini request rejected (400). Check model/input format and API restrictions. Raw: ${raw}`);
+    const err = new Error(`Vertex request rejected (400). Check model/input format and API restrictions. Raw: ${raw}`);
     err.code = 'GEMINI_BAD_REQUEST';
     return err;
   }
 
-  const err = new Error(`Gemini request failed: ${raw}`);
+  const err = new Error(`Vertex request failed: ${raw}`);
   err.code = 'GEMINI_REQUEST_FAILED';
   return err;
-};
-
-const toSafeString = (value = '') => String(value || '').trim();
-
-const cleanArray = (items = []) => {
-  const seen = new Set();
-  const output = [];
-  for (const item of items) {
-    const v = toSafeString(item);
-    const key = v.toLowerCase();
-    if (!v || seen.has(key)) continue;
-    seen.add(key);
-    output.push(v);
-  }
-  return output;
-};
-
-const clamp = (value = '', max = 200) => {
-  const text = toSafeString(value);
-  if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 3)).trim()}...`;
-};
-
-const buildFallbackListingContent = (productDetails = {}, platform = 'amazon') => {
-  const name = toSafeString(productDetails.name) || 'Fashion Product';
-  const category = toSafeString(productDetails.category) || 'Apparel';
-  const color = toSafeString(productDetails.color);
-  const material = toSafeString(productDetails.material);
-  const sizeRange = toSafeString(productDetails.size_range);
-  const brand = toSafeString(productDetails.brand);
-  const description = toSafeString(productDetails.description);
-
-  const titleBase = cleanArray([brand, name, color, material]).join(' ');
-  const titleLimit = platform === 'flipkart' ? 100 : 150;
-  const title = clamp(titleBase || name, titleLimit);
-
-  const bulletPoints = cleanArray([
-    `${name} designed for daily comfort and style`,
-    color ? `Color: ${color}` : '',
-    material ? `Material: ${material}` : '',
-    sizeRange ? `Size range: ${sizeRange}` : '',
-    'Suitable for casual, office, and outing wear'
-  ]).slice(0, 5);
-
-  const descParts = cleanArray([
-    `${name} is a ${category.toLowerCase()} option crafted for practical everyday wear.`,
-    color ? `It comes in ${color.toLowerCase()} color.` : '',
-    material ? `Material details: ${material}.` : '',
-    sizeRange ? `Available sizes: ${sizeRange}.` : '',
-    description
-  ]);
-
-  const keywords = cleanArray([
-    name,
-    category,
-    color,
-    material,
-    brand,
-    `${category} for women`,
-    `${category} for men`,
-    'fashion wear',
-    'stylish outfit'
-  ]).slice(0, 20);
-
-  return {
-    title,
-    description: clamp(descParts.join(' '), platform === 'flipkart' ? 1000 : 2000),
-    bullet_points: bulletPoints,
-    keywords,
-    category_path: `${category} > ${name}`,
-    search_terms: keywords.join(', '),
-    size_chart_note: sizeRange ? `Refer size range: ${sizeRange}` : 'Refer brand size chart before purchase.',
-    care_instructions: 'Gentle wash recommended. Do not bleach. Dry in shade.',
-    in_the_box: [name],
-    _fallback: true
-  };
 };
 
 const fileToBase64 = async (filePath) => {
@@ -439,30 +363,16 @@ Return ONLY valid JSON.`;
   try {
     result = await model.generateContent(prompt);
   } catch (error) {
-    const normalized = normalizeGeminiError(error);
-    if (
-      [
-        'GEMINI_KEY_INVALID',
-        'GEMINI_KEY_MISSING',
-        'GEMINI_KEY_REVOKED',
-        'GEMINI_QUOTA_EXCEEDED',
-        'GEMINI_PERMISSION_DENIED',
-        'GEMINI_MODEL_UNAVAILABLE'
-      ].includes(normalized.code)
-    ) {
-      return {
-        ...buildFallbackListingContent(productDetails, platform),
-        _warning: normalized.message
-      };
-    }
-    throw normalized;
+    throw normalizeGeminiError(error);
   }
   
   try {
     const text = result.response.text().replace(/```json|```/g, '').trim();
     return JSON.parse(text);
   } catch {
-    return buildFallbackListingContent(productDetails, platform);
+    const err = new Error('Vertex listing response was not valid JSON.');
+    err.code = 'GEMINI_BAD_RESPONSE_FORMAT';
+    throw err;
   }
 };
 

@@ -1,4 +1,4 @@
-import { getClient, getImageModelName, getTextModelName, getVertexLocation, isVertexAiEnabled } from './genaiClient.js';
+import { getClient, getImageModelName, getTextModelName } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -33,7 +33,6 @@ const FORMAT_SIZE = {
 
 export const generateProductScene = async (productImagePath, backgroundImagePath, config) => {
   const imageModelName = getImageModelName();
-  const primaryLocation = getVertexLocation();
 
   const productData = fileToBase64(productImagePath);
   const productMime = getMime(productImagePath);
@@ -91,8 +90,8 @@ Generate the product scene image now.`;
 
   parts.push({ text: prompt });
 
-  const runGeneration = async (locationOverride = '') => {
-    const genAI = locationOverride ? getClient({ location: locationOverride }) : getClient();
+  const runGeneration = async () => {
+    const genAI = getClient();
     const model = genAI.getGenerativeModel({ model: imageModelName });
     const result = await model.generateContent(parts);
     const response = result.response;
@@ -116,19 +115,9 @@ Generate the product scene image now.`;
   try {
     return await runGeneration();
   } catch (primaryErr) {
-    let error = primaryErr;
-    let raw = error?.message || String(error || 'Scene generation failed');
+    const error = primaryErr;
+    const raw = error?.message || String(error || 'Scene generation failed');
     const isModelUnavailable = /Publisher Model .* was not found|NOT_FOUND|does not have access to it|not supported for generateContent/i.test(raw);
-
-    // Fallback to us-central1 for image model requests when region lacks model availability.
-    if (isVertexAiEnabled() && isModelUnavailable && String(primaryLocation).toLowerCase() !== 'us-central1') {
-      try {
-        return await runGeneration('us-central1');
-      } catch (fallbackErr) {
-        error = fallbackErr;
-        raw = error?.message || String(error || raw);
-      }
-    }
 
     console.error('Scene generation error:', raw);
 
