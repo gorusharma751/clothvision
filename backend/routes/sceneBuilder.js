@@ -261,7 +261,10 @@ router.post('/generate',
           // Keep original error response if status update also fails.
         }
       }
-      const status = err.message === 'Insufficient credits' ? 402 : 500;
+      let status = 500;
+      if (err.message === 'Insufficient credits') status = 402;
+      else if (err.code === 'GEMINI_QUOTA_EXCEEDED') status = 503;
+      else if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(err.code)) status = 502;
       res.status(status).json({ error: err.message });
     }
   }

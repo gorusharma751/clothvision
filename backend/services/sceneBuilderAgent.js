@@ -1,22 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getClient, getImageModelName, getTextModelName } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
-
-const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
-
-const isPlaceholderValue = (value = '') => {
-  const v = String(value || '').trim();
-  if (!v) return true;
-  const patterns = [/^replace_with_/i, /^your[_-]?/i, /^example/i, /your_key/i, /api[_-]?key[_-]?here/i];
-  return patterns.some((re) => re.test(v));
-};
-
-const getClient = () => {
-  const candidates = [envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')];
-  const key = candidates.find((candidate) => !isPlaceholderValue(candidate));
-  if (!key) throw new Error('Missing GEMINI_API_KEY');
-  return new GoogleGenerativeAI(key);
-};
 
 const fileToBase64 = (p) => fs.readFileSync(p).toString('base64');
 const getMime = (p) => ({ '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' }[path.extname(p).toLowerCase()] || 'image/jpeg');
@@ -49,7 +33,7 @@ const FORMAT_SIZE = {
 
 export const generateProductScene = async (productImagePath, backgroundImagePath, config) => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image') });
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
   const productData = fileToBase64(productImagePath);
   const productMime = getMime(productImagePath);
@@ -125,8 +109,18 @@ Generate the product scene image now.`;
       }
     }
   } catch (err) {
-    console.error('Scene generation error:', err.message);
-    throw new Error(`Scene generation failed: ${err.message}`);
+    const raw = err?.message || String(err || 'Scene generation failed');
+    console.error('Scene generation error:', raw);
+
+    const wrapped = new Error(`Scene generation failed: ${raw}`);
+    wrapped.code = err?.code || 'GEMINI_REQUEST_FAILED';
+
+    if (/RESOURCE_EXHAUSTED|resource exhausted|"code"\s*:\s*429/i.test(raw)) {
+      wrapped.code = 'GEMINI_QUOTA_EXCEEDED';
+      wrapped.message = 'Scene generation failed: Vertex AI quota exhausted (429). Please retry later or increase quota/billing.';
+    }
+
+    throw wrapped;
   }
 
   return results;
@@ -135,7 +129,7 @@ Generate the product scene image now.`;
 // Generate AI prompt suggestion based on product + background
 export const generateScenePrompt = async (productDetails, bgDescription) => {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite') });
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
 
   const prompt = `You are a product photography expert. Suggest the best scene setup for this product listing.
 
