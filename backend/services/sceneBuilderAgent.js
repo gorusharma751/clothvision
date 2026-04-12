@@ -1,4 +1,4 @@
-import { getClient, getImageModelName, getTextModelName } from './genaiClient.js';
+import { getClient, getImageModelName, getTextModelName, getVertexLocation, isVertexAiEnabled } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -32,8 +32,8 @@ const FORMAT_SIZE = {
 };
 
 export const generateProductScene = async (productImagePath, backgroundImagePath, config) => {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: getImageModelName() });
+  const imageModelName = getImageModelName();
+  const primaryLocation = getVertexLocation();
 
   const productData = fileToBase64(productImagePath);
   const productMime = getMime(productImagePath);
@@ -91,15 +91,16 @@ Generate the product scene image now.`;
 
   parts.push({ text: prompt });
 
-  const results = [];
-
-  try {
+  const runGeneration = async (locationOverride = '') => {
+    const genAI = locationOverride ? getClient({ location: locationOverride }) : getClient();
+    const model = genAI.getGenerativeModel({ model: imageModelName });
     const result = await model.generateContent(parts);
     const response = result.response;
+    const generated = [];
 
     for (const part of response.candidates[0].content.parts) {
       if (part.inlineData) {
-        results.push({
+        generated.push({
           imageData: part.inlineData.data,
           mimeType: part.inlineData.mimeType,
           format: config.output_format,
@@ -108,22 +109,42 @@ Generate the product scene image now.`;
         break;
       }
     }
-  } catch (err) {
-    const raw = err?.message || String(err || 'Scene generation failed');
+
+    return generated;
+  };
+
+  try {
+    return await runGeneration();
+  } catch (primaryErr) {
+    let error = primaryErr;
+    let raw = error?.message || String(error || 'Scene generation failed');
+    const isModelUnavailable = /Publisher Model .* was not found|NOT_FOUND|does not have access to it|not supported for generateContent/i.test(raw);
+
+    // Fallback to us-central1 for image model requests when region lacks model availability.
+    if (isVertexAiEnabled() && isModelUnavailable && String(primaryLocation).toLowerCase() !== 'us-central1') {
+      try {
+        return await runGeneration('us-central1');
+      } catch (fallbackErr) {
+        error = fallbackErr;
+        raw = error?.message || String(error || raw);
+      }
+    }
+
     console.error('Scene generation error:', raw);
 
     const wrapped = new Error(`Scene generation failed: ${raw}`);
-    wrapped.code = err?.code || 'GEMINI_REQUEST_FAILED';
+    wrapped.code = error?.code || 'GEMINI_REQUEST_FAILED';
 
     if (/RESOURCE_EXHAUSTED|resource exhausted|"code"\s*:\s*429/i.test(raw)) {
       wrapped.code = 'GEMINI_QUOTA_EXCEEDED';
       wrapped.message = 'Scene generation failed: Vertex AI quota exhausted (429). Please retry later or increase quota/billing.';
+    } else if (isModelUnavailable) {
+      wrapped.code = 'GEMINI_MODEL_UNAVAILABLE';
+      wrapped.message = `Scene generation failed: ${imageModelName} is unavailable in the configured Vertex region. Set GOOGLE_CLOUD_LOCATION=us-central1 (recommended) or use a supported model.`;
     }
 
     throw wrapped;
   }
-
-  return results;
 };
 
 // Generate AI prompt suggestion based on product + background
