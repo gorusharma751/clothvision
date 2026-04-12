@@ -1,0 +1,6 @@
+// ADD these 2 lines to App.jsx:
+
+import SceneBuilder from './pages/studio/SceneBuilder';
+
+// In routes:
+<Route path="/owner/studio/scene" element={<Guard role="owner"><SceneBuilder/></Guard>}/>

@@ -14,6 +14,7 @@ import OwnerCredits from './pages/owner/Credits';
 import StudioSelect from './pages/studio/StudioSelect';
 import DressStudio from './pages/studio/DressStudio';
 import ItemsStudio from './pages/studio/ItemsStudio';
+import SceneBuilder from './pages/studio/SceneBuilder';
 
 const Loader = () => (
   <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0a0a0f'}}>
@@ -49,6 +50,7 @@ function AppRoutes() {
       <Route path="/owner/studio" element={<Guard role="owner"><StudioSelect/></Guard>}/>
       <Route path="/owner/studio/dress" element={<Guard role="owner"><DressStudio/></Guard>}/>
       <Route path="/owner/studio/items" element={<Guard role="owner"><ItemsStudio/></Guard>}/>
+      <Route path="/owner/studio/scene" element={<Guard role="owner"><SceneBuilder/></Guard>}/>
       <Route path="*" element={<Navigate to="/login" replace/>}/>
     </Routes>
   );
