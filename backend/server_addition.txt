@@ -1,0 +1,6 @@
+// ADD IN server.js — after existing routes:
+
+import sceneBuilderRoutes from './routes/sceneBuilder.js';
+
+// Add suggest route directly in server or sceneBuilder.js:
+app.use('/api/scene', sceneBuilderRoutes);

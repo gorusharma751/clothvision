@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { buildUploadUrl } from './uploads';
 
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
 const envApiBase = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '');
@@ -27,5 +28,7 @@ api.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+export const getImageUrl = (storedPath) => buildUploadUrl(storedPath);
 
 export default api;

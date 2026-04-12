@@ -1,0 +1,3 @@
+// ADD this card to StudioSelect.jsx cards array (after items card):
+
+{ id:'scene', icon:'🛋️', label:'Scene Builder', desc:'Place product in any background — car, room, table, custom', color:'#f0b429', border:'rgba(240,180,41,.4)', route:'/owner/studio/scene' },

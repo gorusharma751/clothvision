@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS scene_builds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  product_image TEXT,
+  background_image TEXT,
+  config JSONB,
+  result_images JSONB,
+  credits_used INTEGER DEFAULT 2,
+  created_at TIMESTAMP DEFAULT NOW()
+);
