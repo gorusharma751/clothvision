@@ -52,7 +52,7 @@ const ensureCreditsAvailable = async (userId, amount) => {
 const getErrorStatusCode = (err) => {
   if (err.message === 'Insufficient credits') return 402;
   if (err.code === 'GEMINI_QUOTA_EXCEEDED') return 503;
-  if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST'].includes(err.code)) return 502;
+  if (['GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_KEY_REVOKED', 'GEMINI_MODEL_UNAVAILABLE', 'GEMINI_PERMISSION_DENIED', 'GEMINI_BAD_REQUEST', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(err.code)) return 502;
   return 500;
 };
 

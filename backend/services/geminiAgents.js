@@ -1,75 +1,44 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getClient, getImageModelName, getTextModelName, isVertexAiEnabled } from './genaiClient.js';
 import fs from 'fs';
 import path from 'path';
 
 const isRemoteUrl = (value = '') => /^https?:\/\//i.test(String(value));
 
-const envVal = (name, fallback = '') => String(process.env[name] ?? fallback).trim();
-
-const isPlaceholderValue = (value = '') => {
-  const v = String(value || '').trim();
-  if (!v) return true;
-
-  const patterns = [
-    /^replace_with_/i,
-    /^your[_-]?/i,
-    /^paste[_-]?/i,
-    /^example/i,
-    /^dummy/i,
-    /your_key/i,
-    /api[_-]?key[_-]?here/i
-  ];
-
-  return patterns.some((re) => re.test(v));
-};
-
-const getApiKey = () => {
-  const candidates = [envVal('GEMINI_API_KEY'), envVal('GOOGLE_API_KEY')];
-  const validKey = candidates.find((candidate) => !isPlaceholderValue(candidate));
-  return validKey || '';
-};
-const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
-const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
-
-const getClient = () => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    const err = new Error('Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in backend/.env.local for local development.');
-    err.code = 'GEMINI_KEY_MISSING';
-    throw err;
-  }
-  return new GoogleGenerativeAI(apiKey);
-};
+const getProviderLabel = () => (isVertexAiEnabled() ? 'Vertex AI' : 'Gemini API (AI Studio)');
 
 const normalizeGeminiError = (error) => {
+  if (['GEMINI_KEY_MISSING', 'GEMINI_VERTEX_CONFIG_MISSING'].includes(error?.code)) {
+    return error;
+  }
+
   const raw = error?.message || String(error || 'Gemini request failed');
 
   if (/reported as leaked|key was reported as leaked|key is revoked|key has been disabled/i.test(raw)) {
-    const err = new Error('Gemini API key is revoked (reported leaked). Create a new key in Google AI Studio and update GEMINI_API_KEY.');
+    const err = new Error('Gemini API key is revoked (reported leaked). Create a new key and update your local env values.');
     err.code = 'GEMINI_KEY_REVOKED';
     return err;
   }
 
   if (/API_KEY_INVALID|API key not valid|Please pass a valid API key|invalid api key/i.test(raw)) {
-    const err = new Error('Gemini API key is invalid. Use a valid key from Google AI Studio.');
+    const err = new Error(`Configured API key is invalid for ${getProviderLabel()}.`);
     err.code = 'GEMINI_KEY_INVALID';
     return err;
   }
 
-  if (/429 Too Many Requests|Quota exceeded|rate-limits|limit:\s*0/i.test(raw)) {
-    const err = new Error('Gemini quota exceeded. Enable billing or use a project with active quota, then retry.');
+  if (/429 Too Many Requests|Quota exceeded|rate-limits|limit:\s*0|RESOURCE_EXHAUSTED|resource exhausted/i.test(raw)) {
+    const err = new Error(`${getProviderLabel()} quota exceeded. Check quota/billing on the active provider and retry.`);
     err.code = 'GEMINI_QUOTA_EXCEEDED';
     return err;
   }
 
   if (/404 Not Found|is not found for API version|not supported for generateContent/i.test(raw)) {
-    const err = new Error('Configured Gemini model is unavailable for this API key. Update GEMINI_TEXT_MODEL/GEMINI_IMAGE_MODEL.');
+    const err = new Error(`Configured Gemini model is unavailable on ${getProviderLabel()}. Update GEMINI_TEXT_MODEL/GEMINI_IMAGE_MODEL.`);
     err.code = 'GEMINI_MODEL_UNAVAILABLE';
     return err;
   }
 
   if (/403 Forbidden|PERMISSION_DENIED|has not been used in project|billing account|SERVICE_DISABLED/i.test(raw)) {
-    const err = new Error('Gemini API is not permitted for this project/key. Enable Generative Language API and billing, then retry.');
+    const err = new Error(`${getProviderLabel()} is not permitted for this project/key. Enable required APIs and billing, then retry.`);
     err.code = 'GEMINI_PERMISSION_DENIED';
     return err;
   }
