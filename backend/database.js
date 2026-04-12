@@ -25,11 +25,35 @@ const shouldUseSsl = () => {
 
 const normalizeDbConnectionError = (error) => {
   const raw = String(error?.message || error || 'Database connection failed');
+  const connectionLabel = (() => {
+    try {
+      const parsed = new URL(databaseUrl);
+      return `${parsed.protocol}//${parsed.username || '(no-user)'}:***@${parsed.hostname}:${parsed.port || '5432'}${parsed.pathname}`;
+    } catch {
+      return databaseUrl;
+    }
+  })();
 
   if (/ENOTFOUND/i.test(raw) && /railway\.internal/i.test(raw + ' ' + databaseUrl)) {
     return new Error(
       'Cannot resolve postgres.railway.internal. Use a Railway Postgres URL reachable from this runtime (same project private network or Railway public connection URL).'
     );
+  }
+
+  if (/password authentication failed for user/i.test(raw)) {
+    try {
+      const parsed = new URL(databaseUrl);
+      const isLocalHost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+      if (isLocalHost) {
+        return new Error(
+          `Postgres password authentication failed for local user "${parsed.username}". Update DATABASE_URL in backend/.env with your actual PostgreSQL password. Current URL: ${connectionLabel}`
+        );
+      }
+    } catch {
+      // Fall through to generic auth error.
+    }
+
+    return new Error(`Postgres authentication failed for DATABASE_URL. Verify username/password. Current URL: ${connectionLabel}`);
   }
 
   if (/SSL off|no pg_hba\.conf entry/i.test(raw)) {
@@ -183,6 +207,37 @@ export const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS video_generations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+        video_type VARCHAR(50),
+        script JSONB,
+        frames JSONB,
+        credits_used INTEGER DEFAULT 5,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS label_generations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        product_image TEXT,
+        config JSONB,
+        result_url TEXT,
+        credits_used INTEGER DEFAULT 2,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category VARCHAR(100) NOT NULL,
+        key VARCHAR(200) NOT NULL,
+        value TEXT,
+        description TEXT,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(category, key)
+      );
+
       CREATE TABLE IF NOT EXISTS scene_builds (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -216,6 +271,20 @@ export const initDB = async () => {
       UPDATE plan_settings
       SET credits_per_image = 8
       WHERE plan_name = 'basic';
+
+      INSERT INTO admin_settings (category, key, value, description)
+      VALUES
+        ('image_prompts', 'color_preservation', 'CRITICAL: Product color must be 100% identical to input. No color shift allowed.', 'Color preservation instruction'),
+        ('image_prompts', 'face_preservation', 'Face must be 100% identical - same features, skin tone, eyes, nose, lips.', 'Face preservation instruction'),
+        ('image_prompts', 'quality_standard', 'High resolution, sharp, professional photography quality.', 'Quality standard'),
+        ('video_prompts', 'showcase_extra', 'Smooth camera movement, professional lighting, premium feel.', 'Showcase video extra prompt'),
+        ('video_prompts', 'lifestyle_extra', 'Trendy, social media ready, vibrant colors.', 'Lifestyle video extra prompt'),
+        ('credits', 'tryon_cost', '1', 'Credits per try-on image'),
+        ('credits', 'video_script_cost', '5', 'Credits for video script + frames'),
+        ('credits', 'label_cost', '2', 'Credits for label generation'),
+        ('credits', 'scene_cost', '2', 'Credits for scene builder'),
+        ('credits', 'view360_cost', '4', 'Credits for 360 view (4 images)')
+      ON CONFLICT (category, key) DO NOTHING;
     `);
     console.log('✅ Database initialized');
   } catch (err) {

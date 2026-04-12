@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Sparkles, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -95,6 +95,10 @@ export default function LoginPage() {
               {loading ? <div style={{width:18,height:18,border:'2px solid #ffffff55',borderTopColor:'#fff',borderRadius:'50%'}} className="spin"/> : <><Zap size={16}/>Sign In</>}
             </motion.button>
           </form>
+          <p style={{textAlign:'center',fontSize:'0.78rem',color:'#8f8fb2',marginTop:'1rem'}}>
+            New owner?{' '}
+            <Link to="/register" style={{color:'#a78bfa',textDecoration:'none',fontWeight:600}}>Create account</Link>
+          </p>
           <p style={{textAlign:'center',fontSize:'0.7rem',color:'#6b6b8a',marginTop:'1.5rem'}}>Powered by Gemini AI</p>
         </div>
       </motion.div>

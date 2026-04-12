@@ -140,4 +140,35 @@ router.get('/plan-settings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Prompt/settings management
+router.get('/prompt-settings', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM admin_settings ORDER BY category, key');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/prompt-settings', async (req, res) => {
+  const { category, key, value, description } = req.body;
+  if (!category || !key) return res.status(400).json({ error: 'category and key are required' });
+
+  try {
+    await query(
+      `INSERT INTO admin_settings (category,key,value,description)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (category,key)
+       DO UPDATE SET value=$3, description=$4, updated_at=NOW()`,
+      [category, key, value ?? '', description || '']
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/prompt-settings/:category', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM admin_settings WHERE category=$1 ORDER BY key', [req.params.category]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 export default router;
