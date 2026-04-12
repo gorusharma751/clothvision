@@ -11,6 +11,8 @@ import adminRoutes from './routes/admin.js';
 import productRoutes from './routes/products.js';
 import creditRoutes from './routes/credits.js';
 import sceneRoutes from './routes/sceneBuilder.js';
+import videoRoutes from './routes/video.js';
+import labelRoutes from './routes/label.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();
@@ -41,6 +43,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/scene', sceneRoutes);
+app.use('/api/video', videoRoutes);
+app.use('/api/label', labelRoutes);
 
 // Serve uploaded images
 app.use('/uploads', (req, res, next) => {

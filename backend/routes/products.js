@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../database.js';
 import { authenticate } from '../middleware/auth.js';
-import { analyzeProduct, generateTryOn, generateProductBG, generateCustomerTryOn, generateProductContent, upscaleImage } from '../services/geminiAgents.js';
+import { analyzeProduct, generateTryOn, generateProductBG, generateCustomerTryOn, generateProductContent, generate360View, measureProductSize, upscaleImage } from '../services/geminiAgents.js';
 import { uploadToCloudinary, uploadFileToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
 
 const router = express.Router();
@@ -271,6 +271,114 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     if (productId && movedToProcessing) {
       try { await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]); } catch {}
     }
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
+});
+
+// Generate 360 set for an existing product (front/left/back/right)
+router.post('/:id/generate-360', upload.single('model_image'), async (req, res) => {
+  const taskId = uuidv4();
+  try {
+    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+    const product = products[0];
+
+    const costs = await getCreditCosts(req.user.id);
+    const totalCredits = 4 * costs.credits_per_image;
+    await ensureCreditsAvailable(req.user.id, totalCredits);
+
+    const results = await generate360View(product.original_image, req.file?.path || null, product);
+    if (!results.length) throw new Error('360 generation failed');
+
+    const savedImages = [];
+    for (const r of results) {
+      const imageBuffer = Buffer.from(r.imageData, 'base64');
+      const savedUrl = await saveImage(imageBuffer, req.user.id, `360_${uuidv4()}.jpg`);
+
+      const { rows } = await query(
+        'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+        [
+          product.id,
+          req.user.id,
+          'view_360',
+          r.angle,
+          savedUrl,
+          costs.credits_per_image,
+          JSON.stringify({ task_id: taskId, task_kind: 'view_360', angle: r.angle })
+        ]
+      );
+      savedImages.push(rows[0]);
+    }
+
+    const actualCredits = savedImages.length * costs.credits_per_image;
+    await useCredits(req.user.id, actualCredits);
+    await query(
+      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
+      [req.user.id, 'use', actualCredits, `360 view: "${product.name}"`]
+    );
+
+    res.json({ success: true, images: savedImages, task_id: taskId, credits_used: actualCredits });
+  } catch (err) {
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
+});
+
+// Generate 360 set directly from uploaded product image (without pre-created product)
+router.post('/generate-360-direct', upload.fields([{ name: 'product_image' }, { name: 'model_image' }]), async (req, res) => {
+  const taskId = uuidv4();
+  try {
+    if (!req.files?.product_image) return res.status(400).json({ error: 'Product image required' });
+
+    const costs = await getCreditCosts(req.user.id);
+    const totalCredits = 4 * costs.credits_per_image;
+    await ensureCreditsAvailable(req.user.id, totalCredits);
+
+    const productDetails = {
+      name: req.body.product_name || 'Product',
+      category: req.body.product_category || 'clothing',
+      color: req.body.product_color || ''
+    };
+
+    const productImagePath = req.files.product_image[0].path;
+    const modelImagePath = req.files?.model_image?.[0]?.path || null;
+    const results = await generate360View(productImagePath, modelImagePath, productDetails);
+
+    if (!results.length) throw new Error('360 generation failed');
+
+    const savedImages = [];
+    for (const r of results) {
+      const imageBuffer = Buffer.from(r.imageData, 'base64');
+      const savedUrl = await saveImage(imageBuffer, req.user.id, `360_${uuidv4()}.jpg`);
+      savedImages.push({ angle: r.angle, url: savedUrl });
+    }
+
+    const actualCredits = savedImages.length * costs.credits_per_image;
+    await useCredits(req.user.id, actualCredits);
+    await query(
+      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
+      [req.user.id, 'use', actualCredits, `360 direct: "${productDetails.name}"`]
+    );
+
+    await query(
+      'INSERT INTO video_generations (owner_id, video_type, script, frames, credits_used) VALUES ($1,$2,$3,$4,$5)',
+      [req.user.id, 'view_360', JSON.stringify({ task_id: taskId, source: 'direct' }), JSON.stringify(savedImages), actualCredits]
+    );
+
+    res.json({ success: true, images: savedImages, task_id: taskId, credits_used: actualCredits });
+  } catch (err) {
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
+});
+
+// Product measurement helper for size guidance
+router.post('/:id/measure', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Product not found' });
+
+    const measurement = await measureProductSize(rows[0].original_image, rows[0]);
+    res.json(measurement);
+  } catch (err) {
     res.status(getErrorStatusCode(err)).json({ error: err.message });
   }
 });

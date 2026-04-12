@@ -8,7 +8,9 @@ export default function StudioSelect() {
     { id:'dress', icon:'👗', label:'Dress / Clothing', desc:'Shirts, T-shirts, Jeans, Kurta, Saree & all clothing', color:'#7c3aed', border:'rgba(124,58,237,.4)', route:'/owner/studio/dress' },
     { id:'items', icon:'⌚', label:'Items / Accessories', desc:'Watch, Perfume, Cap, Bag, Shoes, Belt & more', color:'#f0b429', border:'rgba(240,180,41,.4)', route:'/owner/studio/items' },
     { id:'scene', icon:'🛋️', label:'Scene Builder', desc:'Create lifestyle product scenes with props, lighting and placement', color:'#22c55e', border:'rgba(34,197,94,.4)', route:'/owner/studio/scene' },
-    { id:'ugc', icon:'🎬', label:'UGC Photo / Video', desc:'Coming Soon — User-generated content ads', color:'rgba(162,140,250,.3)', border:'rgba(124,58,237,.15)', disabled:true },
+    { id:'video', icon:'🎬', label:'Video Studio', desc:'AI video script + frames for Luma/Runway/Kling', color:'#ef4444', border:'rgba(239,68,68,.4)', route:'/owner/studio/video' },
+    { id:'label', icon:'🏷️', label:'Label Creator', desc:'Design product labels & hang tags with your brand', color:'#8b5cf6', border:'rgba(139,92,246,.4)', route:'/owner/studio/label' },
+    { id:'360', icon:'🔄', label:'360° View', desc:'Generate front/back/left/right for e-commerce viewers', color:'#06b6d4', border:'rgba(6,182,212,.4)', route:'/owner/studio/360' },
   ];
   return (
     <Layout title="AI Studio" subtitle="Choose your product type to get started" contentPadding={0}>
