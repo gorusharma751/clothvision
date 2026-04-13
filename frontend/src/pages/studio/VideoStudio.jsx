@@ -1,198 +1,285 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
-import { ArrowLeft, Wand2, Download, X, Plus, Play, Film, Info } from 'lucide-react';
+import { ArrowLeft, Wand2, Download, Copy, Check, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Layout from '../../components/shared/Layout';
 import api, { getImageUrl } from '../../utils/api';
 
-function DropBox({ preview, onFile, onRemove, label, sublabel, accent='#7c3aed', required }) {
-  const onDrop = useCallback(f=>{if(f[0])onFile(f[0]);}, [onFile]);
-  const {getRootProps,getInputProps,isDragActive} = useDropzone({onDrop,accept:{'image/*':[]},maxFiles:1});
+function UploadBox({ preview, onFile, onRemove }) {
+  const onDrop = useCallback((files) => {
+    if (files[0]) onFile(files[0]);
+  }, [onFile]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'image/*': [] },
+    maxFiles: 1
+  });
+
+  if (preview) {
+    return (
+      <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(239,68,68,.2)', background: '#111118' }}>
+        <img src={preview} alt="product" style={{ width: '100%', maxHeight: 240, objectFit: 'contain', display: 'block' }} />
+        <button
+          type="button"
+          onClick={onRemove}
+          style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'rgba(239,68,68,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        >
+          <X size={12} color="#fff" />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div {...getRootProps()} style={{border:`2px dashed ${isDragActive?accent:preview?`${accent}88`:`${accent}33`}`,borderRadius:14,background:'rgba(17,17,24,.7)',cursor:'pointer',transition:'all .2s',minHeight:130,position:'relative',overflow:'hidden'}}>
-      <input {...getInputProps()}/>
-      {preview ? (
-        <>
-          <img src={preview} alt="p" style={{width:'100%',maxHeight:170,objectFit:'contain',display:'block'}}/>
-          <button type="button" onClick={e=>{e.stopPropagation();onRemove();}} style={{position:'absolute',top:6,right:6,width:22,height:22,borderRadius:'50%',background:'rgba(239,68,68,.85)',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={11} color="#fff"/></button>
-        </>
-      ) : (
-        <div style={{padding:'22px 12px',textAlign:'center'}}>
-          <div style={{width:38,height:38,borderRadius:11,background:`${accent}15`,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px'}}>
-            <Plus size={17} color={`${accent}99`}/>
-          </div>
-          <p style={{fontSize:12,fontWeight:600,color:'rgba(226,226,240,.5)'}}>{label}{required&&<span style={{color:'#f87171'}}> *</span>}</p>
-          {sublabel&&<p style={{fontSize:10,color:`${accent}55`,marginTop:3}}>{sublabel}</p>}
+    <div
+      {...getRootProps()}
+      style={{
+        border: `2px dashed ${isDragActive ? '#ef4444' : 'rgba(239,68,68,.32)'}`,
+        borderRadius: 14,
+        background: isDragActive ? 'rgba(239,68,68,.06)' : '#111118',
+        cursor: 'pointer',
+        minHeight: 180,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        padding: 20
+      }}
+    >
+      <input {...getInputProps()} />
+      <div>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(239,68,68,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+          <Plus size={18} color="#ef4444" />
         </div>
-      )}
+        <p style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>Upload product image</p>
+        <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 11, marginTop: 4 }}>Used to build script + cinematic keyframes</p>
+      </div>
     </div>
   );
 }
 
-const VIDEO_TYPES = [
-  {id:'showcase',label:'Product Showcase',desc:'Professional 8-sec display',emoji:'🎬'},
-  {id:'lifestyle',label:'Lifestyle/Fashion',desc:'Trendy fashion video',emoji:'✨'},
-  {id:'how_to_use',label:'How to Use',desc:'Usage demonstration',emoji:'📖'},
-  {id:'how_to_assemble',label:'How to Assemble',desc:'Step-by-step assembly',emoji:'🔧'},
-  {id:'size_ratio',label:'Size on Body',desc:'Body size comparison',emoji:'📏'},
-  {id:'sample_demo',label:'Sample Demo',desc:'Quick animation demo',emoji:'⚡'},
-];
-
 export default function VideoStudio() {
   const nav = useNavigate();
+
   const [productFile, setProductFile] = useState(null);
   const [productPreview, setProductPreview] = useState(null);
-  const [modelFile, setModelFile] = useState(null);
-  const [modelPreview, setModelPreview] = useState(null);
-  const [videoType, setVideoType] = useState('showcase');
+
+  const [brandName, setBrandName] = useState('');
   const [productName, setProductName] = useState('');
-  const [productCategory, setProductCategory] = useState('');
-  const [productColor, setProductColor] = useState('');
-  const [description, setDescription] = useState('');
+  const [platform, setPlatform] = useState('instagram_reel');
+  const [duration, setDuration] = useState(15);
+  const [tone, setTone] = useState('premium');
+  const [objective, setObjective] = useState('sales');
+  const [cta, setCta] = useState('Shop now');
+
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
+  const [captionCopied, setCaptionCopied] = useState(false);
 
-  const generate = async () => {
-    if(!productFile) return toast.error('Upload product image first');
-    setGenerating(true); setResult(null);
+  const orderedScenes = useMemo(() => {
+    const storyboard = result?.script?.storyboard;
+    if (!Array.isArray(storyboard)) return [];
+    return storyboard;
+  }, [result]);
+
+  const onGenerate = async () => {
+    if (!productFile) return toast.error('Upload product image first');
+
+    setGenerating(true);
+    setResult(null);
+
     try {
-      const fd = new FormData();
-      fd.append('product_image', productFile);
-      if(modelFile) fd.append('model_image', modelFile);
-      fd.append('video_type', videoType);
-      fd.append('product_name', productName||'Product');
-      fd.append('product_category', productCategory||'clothing');
-      fd.append('product_color', productColor||'');
-      fd.append('description', description||'');
-      const r = await api.post('/video/generate-script', fd, {headers:{'Content-Type':'multipart/form-data'}});
-      setResult(r.data);
-      toast.success('Video script + frames generated!');
-    } catch(err){
-      toast.error(err.response?.data?.error || 'Generation failed');
-    } finally { setGenerating(false); }
+      const formData = new FormData();
+      formData.append('product_image', productFile);
+      formData.append('brand_name', brandName);
+      formData.append('product_name', productName);
+      formData.append('platform', platform);
+      formData.append('duration', String(duration));
+      formData.append('tone', tone);
+      formData.append('objective', objective);
+      formData.append('cta', cta);
+
+      const response = await api.post('/studio/video', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setResult(response.data);
+      toast.success(`Video plan ready. Used ${response.data.credits_used} credits.`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Video generation failed');
+    } finally {
+      setGenerating(false);
+    }
   };
 
-  const download = (url) => { const a=document.createElement('a'); a.href=url.startsWith('http')?url:getImageUrl(url); a.download='frame.jpg'; a.click(); };
+  const copyCaption = async () => {
+    const text = result?.script?.caption;
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    setCaptionCopied(true);
+    setTimeout(() => setCaptionCopied(false), 1600);
+    toast.success('Caption copied');
+  };
+
+  const downloadImage = (rawUrl) => {
+    const url = String(rawUrl || '').startsWith('http') ? rawUrl : getImageUrl(rawUrl);
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `video_frame_${Date.now()}.jpg`;
+    a.click();
+  };
 
   return (
-    <div style={{minHeight:'100vh',background:'#0a0a0f'}}>
-      <div style={{position:'sticky',top:0,zIndex:20,padding:'12px 20px',display:'flex',alignItems:'center',gap:14,background:'rgba(10,10,15,.95)',backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(124,58,237,.1)'}}>
-        <button onClick={()=>nav('/owner/studio')} style={{width:36,height:36,borderRadius:10,border:'1px solid rgba(124,58,237,.25)',background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'#a78bfa'}}>
-          <ArrowLeft size={16}/>
+    <Layout
+      title="Video Studio"
+      subtitle="Generate short-video script + keyframes for Luma, Runway, or Kling"
+      actions={
+        <button
+          onClick={() => nav('/owner/studio')}
+          style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(239,68,68,.35)', background: 'transparent', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        >
+          <ArrowLeft size={15} />
         </button>
-        <div>
-          <h1 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1rem',color:'#fff'}}>🎬 Video Studio</h1>
-          <p style={{fontSize:11,color:'rgba(124,58,237,.45)'}}>AI video script + frames for your product</p>
-        </div>
-      </div>
+      }
+    >
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
+        <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ fontFamily: 'Syne,sans-serif', letterSpacing: '.1em', fontSize: 11, color: 'rgba(239,68,68,.6)' }}>INPUT</p>
+          <UploadBox
+            preview={productPreview}
+            onFile={(file) => {
+              setProductFile(file);
+              setProductPreview(URL.createObjectURL(file));
+            }}
+            onRemove={() => {
+              setProductFile(null);
+              setProductPreview(null);
+            }}
+          />
 
-      <div style={{maxWidth:920,margin:'0 auto',padding:'24px 16px'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:20,marginBottom:20}}>
-          {/* Left panel */}
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18}}>
-              <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:10,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>PRODUCT IMAGE *</p>
-              <DropBox preview={productPreview} onFile={f=>{setProductFile(f);setProductPreview(URL.createObjectURL(f));}} onRemove={()=>{setProductFile(null);setProductPreview(null);}} label="Upload product" sublabel="Main product photo" required/>
-            </div>
-            <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18}}>
-              <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:10,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>MODEL IMAGE (optional)</p>
-              <DropBox preview={modelPreview} onFile={f=>{setModelFile(f);setModelPreview(URL.createObjectURL(f));}} onRemove={()=>{setModelFile(null);setModelPreview(null);}} label="Upload model" sublabel="For clothing try-on frames"/>
-            </div>
-            <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18,display:'flex',flexDirection:'column',gap:10}}>
-              {[['Product Name',productName,setProductName,'e.g. Blue Denim Jacket'],['Category',productCategory,setProductCategory,'e.g. Jacket'],['Color',productColor,setProductColor,'e.g. Navy Blue']].map(([l,v,s,ph])=>(
-                <div key={l}>
-                  <label style={{fontSize:10,color:'rgba(124,58,237,.4)',display:'block',marginBottom:4,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>{l.toUpperCase()}</label>
-                  <input className="cv-input" value={v} onChange={e=>s(e.target.value)} placeholder={ph}/>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <input className="cv-input" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Brand name" />
+            <input className="cv-input" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Product name" />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <select className="cv-input" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+              <option value="instagram_reel">Instagram Reel</option>
+              <option value="youtube_short">YouTube Short</option>
+              <option value="facebook_reel">Facebook Reel</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+            <select className="cv-input" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+              <option value={10}>10 sec</option>
+              <option value={15}>15 sec</option>
+              <option value={20}>20 sec</option>
+              <option value={30}>30 sec</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <select className="cv-input" value={tone} onChange={(e) => setTone(e.target.value)}>
+              <option value="premium">Premium</option>
+              <option value="minimal">Minimal</option>
+              <option value="bold">Bold</option>
+              <option value="playful">Playful</option>
+            </select>
+            <select className="cv-input" value={objective} onChange={(e) => setObjective(e.target.value)}>
+              <option value="sales">Drive Sales</option>
+              <option value="awareness">Brand Awareness</option>
+              <option value="launch">New Launch</option>
+            </select>
+          </div>
+
+          <input className="cv-input" value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Call to action" />
+
+          <button className="btn-primary" onClick={onGenerate} disabled={generating || !productFile} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
+            {generating ? 'Generating...' : <><Wand2 size={14} />Generate Script + Keyframes (5 credits)</>}
+          </button>
+        </div>
+
+        <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 16 }}>
+          <p style={{ fontFamily: 'Syne,sans-serif', letterSpacing: '.1em', fontSize: 11, color: 'rgba(239,68,68,.6)', marginBottom: 10 }}>OUTPUT</p>
+
+          {!result && (
+            <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 13 }}>Generate to see storyboard, caption, hashtags, and keyframes.</p>
+          )}
+
+          {result?.script && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(239,68,68,.07)', border: '1px solid rgba(239,68,68,.22)' }}>
+                <p style={{ fontSize: 11, color: 'rgba(239,68,68,.7)', marginBottom: 4, fontFamily: 'Syne,sans-serif', letterSpacing: '.08em' }}>HOOK</p>
+                <p style={{ fontSize: 13, color: '#fff' }}>{result.script.hook}</p>
+              </div>
+
+              <div style={{ padding: 12, borderRadius: 12, background: 'rgba(124,58,237,.06)', border: '1px solid rgba(124,58,237,.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <p style={{ fontSize: 11, color: 'rgba(162,140,250,.65)', fontFamily: 'Syne,sans-serif', letterSpacing: '.08em' }}>CAPTION</p>
+                  <button
+                    onClick={copyCaption}
+                    style={{ border: '1px solid rgba(124,58,237,.25)', background: 'transparent', color: captionCopied ? '#4ade80' : '#a78bfa', borderRadius: 8, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', cursor: 'pointer' }}
+                  >
+                    {captionCopied ? <><Check size={11} />Copied</> : <><Copy size={11} />Copy</>}
+                  </button>
                 </div>
-              ))}
+                <p style={{ fontSize: 13, color: 'rgba(226,226,240,.7)', lineHeight: 1.6 }}>{result.script.caption}</p>
+              </div>
+
               <div>
-                <label style={{fontSize:10,color:'rgba(124,58,237,.4)',display:'block',marginBottom:4,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>DETAILS</label>
-                <textarea className="cv-input" value={description} onChange={e=>setDescription(e.target.value)} placeholder="Product details, features..." style={{resize:'none',minHeight:64}}/>
-              </div>
-            </div>
-          </div>
-
-          {/* Right panel */}
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18}}>
-              <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:12,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>VIDEO TYPE</p>
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {VIDEO_TYPES.map(t=>(
-                  <div key={t.id} onClick={()=>setVideoType(t.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1px solid ${videoType===t.id?'rgba(124,58,237,.5)':'rgba(30,30,45,.8)'}`,background:videoType===t.id?'rgba(124,58,237,.1)':'transparent',cursor:'pointer',transition:'all .2s'}}>
-                    <span style={{fontSize:20}}>{t.emoji}</span>
-                    <div>
-                      <p style={{fontSize:12,fontWeight:videoType===t.id?600:400,color:videoType===t.id?'#a78bfa':'rgba(226,226,240,.6)'}}>{t.label}</p>
-                      <p style={{fontSize:10,color:'rgba(162,140,250,.35)'}}>{t.desc}</p>
+                <p style={{ fontSize: 11, color: 'rgba(162,140,250,.65)', marginBottom: 6, fontFamily: 'Syne,sans-serif', letterSpacing: '.08em' }}>STORYBOARD</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {orderedScenes.map((scene, idx) => (
+                    <div key={`${scene.scene}-${idx}`} style={{ border: '1px solid rgba(124,58,237,.16)', borderRadius: 10, padding: 10, background: 'rgba(124,58,237,.03)' }}>
+                      <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{idx + 1}. {scene.scene}</p>
+                      <p style={{ color: 'rgba(226,226,240,.62)', fontSize: 12, marginTop: 4 }}><strong style={{ color: '#a78bfa' }}>Visual:</strong> {scene.visual}</p>
+                      <p style={{ color: 'rgba(226,226,240,.62)', fontSize: 12, marginTop: 2 }}><strong style={{ color: '#a78bfa' }}>Overlay:</strong> {scene.text_overlay}</p>
+                      <p style={{ color: 'rgba(226,226,240,.62)', fontSize: 12, marginTop: 2 }}><strong style={{ color: '#a78bfa' }}>Voice:</strong> {scene.voiceover}</p>
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              {Array.isArray(result.script.hashtags) && result.script.hashtags.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {result.script.hashtags.map((tag) => (
+                    <span key={tag} style={{ padding: '4px 8px', borderRadius: 999, border: '1px solid rgba(16,185,129,.3)', background: 'rgba(16,185,129,.1)', color: '#34d399', fontSize: 11 }}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {Array.isArray(result.frames) && result.frames.length > 0 && (
+                <div>
+                  <p style={{ fontSize: 11, color: 'rgba(162,140,250,.65)', marginBottom: 8, fontFamily: 'Syne,sans-serif', letterSpacing: '.08em' }}>KEYFRAMES</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 8 }}>
+                    {result.frames.map((frame) => {
+                      const url = String(frame.url || '').startsWith('http') ? frame.url : getImageUrl(frame.url);
+                      return (
+                        <div key={`${frame.scene}-${frame.index}`} style={{ border: '1px solid rgba(124,58,237,.16)', borderRadius: 10, overflow: 'hidden', background: '#0d0d15' }}>
+                          <img src={url} alt={frame.scene} style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }} />
+                          <div style={{ padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                            <p style={{ color: 'rgba(226,226,240,.65)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{frame.scene}</p>
+                            <button
+                              onClick={() => downloadImage(frame.url)}
+                              style={{ width: 24, height: 24, border: 'none', borderRadius: 6, background: 'rgba(124,58,237,.18)', color: '#a78bfa', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            >
+                              <Download size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
-            <div style={{padding:12,borderRadius:12,background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.12)'}}>
-              <p style={{fontSize:11,color:'rgba(124,58,237,.5)',fontWeight:600,marginBottom:6,display:'flex',alignItems:'center',gap:4}}><Info size={12}/>How it works</p>
-              <p style={{fontSize:11,color:'rgba(162,140,250,.5)',lineHeight:1.6}}>AI generates a video script + key frames. Use these with <strong style={{color:'#a78bfa'}}>Luma AI, Runway, or Kling AI</strong> to create the actual video.</p>
-            </div>
-            <button onClick={generate} disabled={generating||!productFile} className="btn-primary" style={{width:'100%',height:48,justifyContent:'center',fontSize:'.95rem'}}>
-              {generating ? <><div style={{width:16,height:16,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>Generating...</> : <><Film size={16}/>Generate Video Script & Frames</>}
-            </button>
-          </div>
+          )}
         </div>
-
-        {/* Results */}
-        {result && (
-          <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20,animation:'fadeUp .4s ease'}}>
-            <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',marginBottom:16}}>🎬 Generated Script + Frames</h3>
-            
-            {/* Frames */}
-            {result.frames?.length > 0 && (
-              <div style={{marginBottom:20}}>
-                <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:10,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>KEY FRAMES</p>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10}}>
-                  {result.frames.map((f,i)=>(
-                    <div key={i} style={{borderRadius:10,overflow:'hidden',border:'1px solid rgba(124,58,237,.15)',position:'relative'}}>
-                      <img src={f.url?.startsWith('http')?f.url:getImageUrl(f.url)} alt={f.angle} style={{width:'100%',aspectRatio:'3/4',objectFit:'cover'}}/>
-                      <div style={{padding:'6px 8px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10,color:'rgba(162,140,250,.5)',textTransform:'capitalize'}}>{f.angle?.replace('_',' ')}</span>
-                        <button onClick={()=>download(f.url)} style={{width:22,height:22,borderRadius:6,background:'rgba(124,58,237,.15)',border:'none',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><Download size={10} color="#a78bfa"/></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Script */}
-            {result.script?.scenes?.length > 0 && (
-              <div style={{marginBottom:16}}>
-                <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:10,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>VIDEO SCRIPT (8 SECONDS)</p>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {result.script.scenes.map((s,i)=>(
-                    <div key={i} style={{padding:'10px 12px',borderRadius:10,background:'rgba(124,58,237,.04)',border:'1px solid rgba(124,58,237,.08)',display:'grid',gridTemplateColumns:'80px 1fr',gap:10,alignItems:'start'}}>
-                      <div style={{textAlign:'center',padding:'4px 8px',borderRadius:8,background:'rgba(124,58,237,.15)'}}>
-                        <p style={{fontSize:11,fontWeight:600,color:'#a78bfa'}}>{s.second}s</p>
-                      </div>
-                      <div>
-                        <p style={{fontSize:12,fontWeight:600,color:'#fff',marginBottom:2}}>{s.shot}</p>
-                        <p style={{fontSize:11,color:'rgba(162,140,250,.6)'}}>{s.action}</p>
-                        {s.text_overlay&&<p style={{fontSize:10,color:'rgba(240,180,41,.6)',marginTop:2}}>"{s.text_overlay}"</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Motion prompt */}
-            {result.script?.motion_prompt && (
-              <div style={{padding:'12px 14px',borderRadius:10,background:'rgba(34,197,94,.05)',border:'1px solid rgba(34,197,94,.15)'}}>
-                <p style={{fontSize:11,color:'#4ade80',fontWeight:600,marginBottom:6}}>🎯 Prompt for AI Video Generator (Luma / Runway / Kling)</p>
-                <p style={{fontSize:12,color:'rgba(226,226,240,.7)',lineHeight:1.6}}>{result.script.motion_prompt}</p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
-    </div>
+    </Layout>
   );
 }

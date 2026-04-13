@@ -2,7 +2,9 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+import LandingPage from './pages/landing/LandingPage';
 import LoginPage from './pages/LoginPage';
+import LandingCMS from './pages/admin/LandingCMS';
 import Register from './pages/auth/Register';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminOwners from './pages/admin/Owners';
@@ -13,6 +15,7 @@ import OwnerProducts from './pages/owner/Products';
 import OwnerGeneratedGallery from './pages/owner/GeneratedGallery';
 import OwnerCredits from './pages/owner/Credits';
 import StudioSelect from './pages/studio/StudioSelect';
+import MarketingStudio from './pages/studio/MarketingStudio';
 import DressStudio from './pages/studio/DressStudio';
 import ItemsStudio from './pages/studio/ItemsStudio';
 import SceneBuilder from './pages/studio/SceneBuilder';
@@ -42,24 +45,28 @@ function AppRoutes() {
   const { user } = useAuth();
   return (
     <Routes>
+      <Route path="/" element={<LandingPage/>}/>
       <Route path="/login" element={user ? <Navigate to={user.role==='admin'?'/admin':'/owner'}/> : <LoginPage/>}/>
       <Route path="/register" element={user ? <Navigate to="/owner"/> : <Register/>}/>
+    <Route path="/register" element={user ? <Navigate to={user.role==='admin'?'/admin':'/owner'}/> : <Register/>}/>
       <Route path="/admin" element={<Guard role="admin"><AdminDashboard/></Guard>}/>
       <Route path="/admin/owners" element={<Guard role="admin"><AdminOwners/></Guard>}/>
       <Route path="/admin/credits" element={<Guard role="admin"><AdminCredits/></Guard>}/>
       <Route path="/admin/settings" element={<Guard role="admin"><AdminSettings/></Guard>}/>
+      <Route path="/admin/landing" element={<Guard role="admin"><LandingCMS/></Guard>}/>
       <Route path="/owner" element={<Guard role="owner"><OwnerDashboard/></Guard>}/>
       <Route path="/owner/products" element={<Guard role="owner"><OwnerProducts/></Guard>}/>
       <Route path="/owner/generated" element={<Guard role="owner"><OwnerGeneratedGallery/></Guard>}/>
       <Route path="/owner/credits" element={<Guard role="owner"><OwnerCredits/></Guard>}/>
       <Route path="/owner/studio" element={<Guard role="owner"><StudioSelect/></Guard>}/>
+      <Route path="/owner/studio/marketing" element={<Guard role="owner"><MarketingStudio/></Guard>}/>
       <Route path="/owner/studio/dress" element={<Guard role="owner"><DressStudio/></Guard>}/>
       <Route path="/owner/studio/items" element={<Guard role="owner"><ItemsStudio/></Guard>}/>
       <Route path="/owner/studio/scene" element={<Guard role="owner"><SceneBuilder/></Guard>}/>
       <Route path="/owner/studio/video" element={<Guard role="owner"><VideoStudio/></Guard>}/>
       <Route path="/owner/studio/label" element={<Guard role="owner"><LabelCreator/></Guard>}/>
       <Route path="/owner/studio/360" element={<Guard role="owner"><View360Studio/></Guard>}/>
-      <Route path="*" element={<Navigate to="/login" replace/>}/>
+      <Route path="*" element={<Navigate to="/" replace/>}/>
     </Routes>
   );
 }

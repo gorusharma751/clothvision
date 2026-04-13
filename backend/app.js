@@ -11,6 +11,10 @@ import adminRoutes from './routes/admin.js';
 import productRoutes from './routes/products.js';
 import creditRoutes from './routes/credits.js';
 import sceneRoutes from './routes/sceneBuilder.js';
+import marketingRoutes from './routes/marketing.js';
+import landingRoutes from './routes/landing.js';
+import generationsRoutes from './routes/generations.js';
+import studioRoutes from './routes/studio.js';
 import videoRoutes from './routes/video.js';
 import labelRoutes from './routes/label.js';
 
@@ -43,6 +47,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/scene', sceneRoutes);
+app.use('/api/marketing', marketingRoutes);
+app.use('/api/landing', landingRoutes);
+app.use('/api/generations', generationsRoutes);
+app.use('/api/studio', studioRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/label', labelRoutes);
 
