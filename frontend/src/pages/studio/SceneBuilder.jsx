@@ -43,10 +43,86 @@ function Chip({ label, emoji, selected, onClick, color = '#7c3aed' }) {
   );
 }
 
+const FALLBACK_PRESETS = {
+  surface_types: [
+    { id: 'table', label: 'Table / Desk', emoji: '🪑', desc: 'Place product on table surface' },
+    { id: 'shelf', label: 'Shelf / Rack', emoji: '📚', desc: 'Place on shelf or rack' },
+    { id: 'floor', label: 'Floor / Ground', emoji: '🪵', desc: 'Place on floor surface' },
+    { id: 'car_dashboard', label: 'Car Dashboard', emoji: '🚗', desc: 'Place inside car' },
+    { id: 'car_seat', label: 'Car Seat', emoji: '💺', desc: 'Place on car seat' },
+    { id: 'bed', label: 'Bed / Sofa', emoji: '🛋️', desc: 'Place on furniture' },
+    { id: 'custom', label: 'Custom Position', emoji: '✏️', desc: 'Describe your own placement' },
+  ],
+  prop_items: {
+    table: [
+      { id: 'flowers', label: 'Flowers', emoji: '💐' },
+      { id: 'candles', label: 'Candles', emoji: '🕯️' },
+      { id: 'leaves', label: 'Leaves/Plants', emoji: '🌿' },
+      { id: 'coffee_cup', label: 'Coffee Cup', emoji: '☕' },
+      { id: 'books', label: 'Books', emoji: '📚' },
+      { id: 'fabric', label: 'Fabric/Cloth', emoji: '🧣' },
+      { id: 'stones', label: 'Pebbles', emoji: '🪨' },
+      { id: 'fruits', label: 'Fruits', emoji: '🍋' },
+    ],
+    shelf: [
+      { id: 'books', label: 'Books', emoji: '📚' },
+      { id: 'small_plant', label: 'Small Plant', emoji: '🪴' },
+      { id: 'photo_frame', label: 'Photo Frame', emoji: '🖼️' },
+      { id: 'candles', label: 'Candles', emoji: '🕯️' },
+      { id: 'clock', label: 'Clock', emoji: '🕐' },
+      { id: 'vase', label: 'Vase', emoji: '🏺' },
+    ],
+    floor: [
+      { id: 'leaves', label: 'Leaves', emoji: '🍂' },
+      { id: 'stones', label: 'Stones', emoji: '🪨' },
+      { id: 'fabric', label: 'Fabric', emoji: '🧣' },
+      { id: 'flowers', label: 'Flowers', emoji: '💐' },
+      { id: 'wooden_crate', label: 'Wooden Crate', emoji: '📦' },
+    ],
+    car_dashboard: [
+      { id: 'air_freshener', label: 'Air Freshener', emoji: '🌬️' },
+      { id: 'sunglasses', label: 'Sunglasses', emoji: '🕶️' },
+      { id: 'phone_mount', label: 'Phone Mount', emoji: '📱' },
+      { id: 'car_keys', label: 'Car Keys', emoji: '🔑' },
+      { id: 'steering_cover', label: 'Steering Cover', emoji: '🎡' },
+    ],
+    car_seat: [
+      { id: 'sunglasses', label: 'Sunglasses', emoji: '🕶️' },
+      { id: 'car_keys', label: 'Car Keys', emoji: '🔑' },
+      { id: 'shopping_bag', label: 'Shopping Bag', emoji: '🛍️' },
+      { id: 'jacket', label: 'Jacket', emoji: '🧥' },
+      { id: 'water_bottle', label: 'Water Bottle', emoji: '💧' },
+    ],
+    bed: [
+      { id: 'cushions', label: 'Cushions', emoji: '🛋️' },
+      { id: 'flowers', label: 'Flowers', emoji: '💐' },
+      { id: 'candles', label: 'Candles', emoji: '🕯️' },
+      { id: 'books', label: 'Books', emoji: '📚' },
+      { id: 'fabric', label: 'Fabric', emoji: '🧣' },
+    ],
+    custom: [
+      { id: 'flowers', label: 'Flowers', emoji: '💐' },
+      { id: 'candles', label: 'Candles', emoji: '🕯️' },
+      { id: 'leaves', label: 'Leaves', emoji: '🌿' },
+      { id: 'fabric', label: 'Fabric', emoji: '🧣' },
+      { id: 'jewelry', label: 'Jewelry', emoji: '💍' },
+      { id: 'watch', label: 'Watch', emoji: '⌚' },
+    ],
+  },
+  output_formats: [
+    { id: 'flipkart_square', label: 'Flipkart Square', size: '1:1', desc: '1000x1000px' },
+    { id: 'amazon_rect', label: 'Amazon Rectangle', size: '4:3', desc: '2000x1500px' },
+    { id: 'instagram', label: 'Instagram Post', size: '1:1', desc: '1080x1080px' },
+    { id: 'story', label: 'Story/Reel', size: '9:16', desc: '1080x1920px' },
+    { id: 'banner', label: 'Banner/Ad', size: '16:9', desc: '1920x1080px' },
+  ]
+};
+
 export default function SceneBuilder() {
   const nav = useNavigate();
   const [step, setStep] = useState(0);
-  const [presets, setPresets] = useState(null);
+  const [presets, setPresets] = useState(FALLBACK_PRESETS);
+  const [presetsError, setPresetsError] = useState('');
 
   // Images
   const [productFile, setProductFile] = useState(null);
@@ -75,25 +151,55 @@ export default function SceneBuilder() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    api.get('/scene/presets').then(r => setPresets(r.data)).catch(() => {});    
+    api.get('/scene/presets')
+      .then((response) => {
+        setPresets(response.data || FALLBACK_PRESETS);
+        setPresetsError('');
+      })
+      .catch((err) => {
+        setPresets(FALLBACK_PRESETS);
+        const message = err?.response?.status === 401
+          ? 'Session expired. Please login again to load live presets.'
+          : 'Could not load live presets. Using local presets.';
+        setPresetsError(message);
+      });
   }, []);
 
+  const handleSurfaceChange = (id) => {
+    if (id === surfaceType) return;
+    setSurfaceType(id);
+    setSelectedProps([]);
+  };
+
   const getAiSuggestion = async () => {
-    if (!productName) return toast.error('Enter product name first');
     setLoadingSuggestion(true);
     try {
-      const r = await api.post('/scene/suggest', { product_name: productName, product_category: productCategory, bg_description: bgPreview ? 'custom background provided' : 'no background' });
+      const fallbackName = String(productName || productCategory || '').trim() || 'Product';
+      const r = await api.post('/scene/suggest', {
+        product_name: fallbackName,
+        product_category: productCategory,
+        bg_description: bgPreview ? 'custom background provided' : 'no background'
+      });
       setAiSuggestion(r.data);
-      if (r.data.suggested_surface) setSurfaceType(r.data.suggested_surface);   
+      if (r.data.suggested_surface) handleSurfaceChange(r.data.suggested_surface);
       if (r.data.suggested_lighting) setLightingStyle(r.data.suggested_lighting);
       if (r.data.suggested_props) setSelectedProps(r.data.suggested_props.slice(0, 3));
       if (r.data.custom_prompt) setCustomPrompt(r.data.custom_prompt);
       toast.success('AI suggestions applied!');
-    } catch { toast.error('Suggestion failed'); }
+    } catch (err) {
+      const message = err?.response?.data?.error || (err?.request
+        ? 'AI suggestion is unavailable. Check backend and database connection.'
+        : 'Suggestion failed');
+      toast.error(message);
+    }
     finally { setLoadingSuggestion(false); }
   };
 
   const toggleProp = (id) => setSelectedProps(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const availableProps = Array.isArray(presets?.prop_items)
+    ? presets.prop_items
+    : (presets?.prop_items?.[surfaceType] || presets?.prop_items?.custom || []);
 
   const generate = async () => {
     if (!productFile) return toast.error('Upload product image first');
@@ -118,8 +224,13 @@ export default function SceneBuilder() {
       setStep(3);
       toast.success(`Scene generated! Used ${r.data.credits_used} credits.`);   
     } catch (err) {
-      if (err.response?.data?.error === 'Insufficient credits') toast.error('Not enough credits! Request more.');
-      else toast.error(err.response?.data?.error || 'Generation failed');       
+      if (err.response?.data?.error === 'Insufficient credits') {
+        toast.error('Not enough credits! Request more.');
+      } else if (!err.response) {
+        toast.error('Cannot reach backend. Verify backend is running and database login is valid.');
+      } else {
+        toast.error(err.response?.data?.error || 'Generation failed');
+      }
     } finally { setGenerating(false); }
   };
 
@@ -231,12 +342,18 @@ export default function SceneBuilder() {
               </div>
             )}
 
+            {presetsError && (
+              <div style={{ background: 'rgba(251,191,36,.08)', border: '1px solid rgba(251,191,36,.25)', borderRadius: 12, padding: '10px 12px', marginBottom: 16 }}>
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>{presetsError}</p>
+              </div>
+            )}
+
             {/* Surface type */}
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 11, color: 'rgba(240,180,41,.5)', marginBottom: 10, fontFamily: 'Syne,sans-serif', letterSpacing: '.1em' }}>PLACEMENT SURFACE</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 8 }}>
-                {(presets?.surface_types || []).map(s => (
-                  <div key={s.id} onClick={() => setSurfaceType(s.id)} style={{ border: `2px solid ${surfaceType === s.id ? 'rgba(240,180,41,.6)' : 'rgba(30,30,45,.8)'}`, borderRadius: 12, padding: '12px 8px', textAlign: 'center', cursor: 'pointer', background: surfaceType === s.id ? 'rgba(240,180,41,.08)' : 'rgba(17,17,24,.7)', transition: 'all .2s' }}>
+                {(presets?.surface_types || FALLBACK_PRESETS.surface_types).map(s => (
+                  <div key={s.id} onClick={() => handleSurfaceChange(s.id)} style={{ border: `2px solid ${surfaceType === s.id ? 'rgba(240,180,41,.6)' : 'rgba(30,30,45,.8)'}`, borderRadius: 12, padding: '12px 8px', textAlign: 'center', cursor: 'pointer', background: surfaceType === s.id ? 'rgba(240,180,41,.08)' : 'rgba(17,17,24,.7)', transition: 'all .2s' }}>
                     <div style={{ fontSize: 24, marginBottom: 6 }}>{s.emoji}</div>
                     <p style={{ fontSize: 11, fontWeight: surfaceType === s.id ? 600 : 400, color: surfaceType === s.id ? '#f0b429' : 'rgba(226,226,240,.5)' }}>{s.label}</p>
                   </div>
@@ -256,7 +373,7 @@ export default function SceneBuilder() {
             <div>
               <p style={{ fontSize: 11, color: 'rgba(240,180,41,.5)', marginBottom: 10, fontFamily: 'Syne,sans-serif', letterSpacing: '.1em' }}>ADD PROPS (optional)</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>       
-                {(presets?.prop_items || []).map(p => (
+                {availableProps.map(p => (
                   <Chip key={p.id} label={p.label} emoji={p.emoji} selected={selectedProps.includes(p.id)} onClick={() => toggleProp(p.id)} color="#f0b429" />  
                 ))}
               </div>
@@ -274,7 +391,7 @@ export default function SceneBuilder() {
               <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 18 }}>
                 <p style={{ fontSize: 11, color: 'rgba(240,180,41,.5)', marginBottom: 12, fontFamily: 'Syne,sans-serif', letterSpacing: '.1em' }}>OUTPUT FORMAT</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {(presets?.output_formats || []).map(f => (
+                  {(presets?.output_formats || FALLBACK_PRESETS.output_formats).map(f => (
                     <div key={f.id} onClick={() => setOutputFormat(f.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 10, border: `1px solid ${outputFormat === f.id ? 'rgba(240,180,41,.5)' : 'rgba(30,30,45,.8)'}`, background: outputFormat === f.id ? 'rgba(240,180,41,.08)' : 'rgba(17,17,24,.5)', cursor: 'pointer', transition: 'all .2s' }}>
                       <div>
                         <p style={{ fontSize: 12, fontWeight: outputFormat === f.id ? 600 : 400, color: outputFormat === f.id ? '#f0b429' : 'rgba(226,226,240,.6)' }}>{f.label}</p>

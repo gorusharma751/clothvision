@@ -376,6 +376,212 @@ Return ONLY valid JSON.`;
   }
 };
 
+const view360AngleInstructions = {
+  front: 'front-facing view with the product centered',
+  left_side: 'left-side profile view with natural perspective',
+  back: 'back view showing rear details',
+  right_side: 'right-side profile view with natural perspective'
+};
+
+export const generate360View = async (productImagePath, modelImagePath, productDetails) => {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
+
+  const productData = await fileToBase64(productImagePath);
+  const productMime = getMimeType(productImagePath);
+  const modelData = modelImagePath ? await fileToBase64(modelImagePath) : null;
+  const modelMime = modelImagePath ? getMimeType(modelImagePath) : null;
+
+  const angles = ['front', 'left_side', 'back', 'right_side'];
+  const results = [];
+
+  for (const angle of angles) {
+    const prompt = `Professional 360 product photography.
+
+CRITICAL REQUIREMENTS:
+1. Product color must remain EXACTLY identical to source image.
+2. Product design/details must remain EXACTLY identical.
+3. Keep lighting and background consistent across all angles.
+4. Output only differs by camera angle.
+5. Background: clean white or light gray studio.
+
+Product: ${productDetails?.name || 'Product'}
+Category: ${productDetails?.category || 'item'}
+Color: ${productDetails?.color || 'as shown'}
+
+Angle instruction: ${view360AngleInstructions[angle] || view360AngleInstructions.front}
+
+Generate one high-quality e-commerce image for this specific angle.`;
+
+    const contentParts = [{ inlineData: { data: productData, mimeType: productMime } }];
+    if (modelData && modelMime) contentParts.unshift({ inlineData: { data: modelData, mimeType: modelMime } });
+    contentParts.push(prompt);
+
+    try {
+      const response = await model.generateContent(contentParts);
+      const parts = response?.response?.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((part) => part.inlineData?.data);
+      if (imagePart?.inlineData?.data) {
+        results.push({
+          angle,
+          imageData: imagePart.inlineData.data,
+          mimeType: imagePart.inlineData.mimeType || 'image/jpeg'
+        });
+      }
+    } catch (error) {
+      const err = normalizeGeminiError(error);
+      if (['GEMINI_QUOTA_EXCEEDED', 'GEMINI_KEY_INVALID', 'GEMINI_KEY_MISSING', 'GEMINI_MODEL_UNAVAILABLE'].includes(err.code)) {
+        throw err;
+      }
+    }
+  }
+
+  return results;
+};
+
+export const generateVideoScript = async (productDetails, videoType = 'showcase') => {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
+
+  const typePrompt = {
+    showcase: 'premium product showcase',
+    how_to_use: 'instructional how-to-use clip',
+    how_to_assemble: 'assembly tutorial clip',
+    size_ratio: 'size comparison clip',
+    lifestyle: 'lifestyle fashion clip',
+    sample_demo: 'quick social media demo clip'
+  };
+
+  const prompt = `Create an 8-second video concept JSON for e-commerce/social media.
+
+Product:
+- Name: ${productDetails?.name || 'Product'}
+- Category: ${productDetails?.category || 'item'}
+- Color: ${productDetails?.color || 'as shown'}
+- Description: ${productDetails?.description || 'N/A'}
+
+Video type: ${typePrompt[videoType] || typePrompt.showcase}
+
+Return ONLY valid JSON in this schema:
+{
+  "video_type": "${videoType}",
+  "duration": "8 seconds",
+  "scenes": [
+    {"second":"0-2","shot":"...","action":"...","text_overlay":"..."},
+    {"second":"2-4","shot":"...","action":"...","text_overlay":"..."},
+    {"second":"4-6","shot":"...","action":"...","text_overlay":"..."},
+    {"second":"6-8","shot":"...","action":"...","text_overlay":"..."}
+  ],
+  "motion_prompt": "single detailed prompt suitable for Luma/Runway/Kling",
+  "style_notes": "visual style guidance",
+  "color_note": "must preserve product color exactly"
+}`;
+
+  try {
+    const response = await model.generateContent(prompt);
+    const text = response.response.text().replace(/```json|```/g, '').trim();
+    return JSON.parse(text);
+  } catch {
+    return {
+      video_type: videoType,
+      duration: '8 seconds',
+      scenes: [],
+      motion_prompt: `Showcase ${productDetails?.name || 'product'} with smooth camera movement and premium lighting.`,
+      style_notes: 'Clean professional style',
+      color_note: `Preserve ${productDetails?.color || 'original'} color exactly.`
+    };
+  }
+};
+
+export const generateProductLabel = async (productImagePath, config) => {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: getImageModelName() });
+
+  const imageData = await fileToBase64(productImagePath);
+  const mimeType = getMimeType(productImagePath);
+
+  const prompt = `You are a premium product label designer.
+
+Create a professional product label/tag design and apply it naturally to the product image.
+
+Brand: ${config?.brand_name || 'Brand'}
+Product: ${config?.product_name || 'Product'}
+Tagline: ${config?.tagline || ''}
+Style: ${config?.style || 'modern_minimal'}
+Colors: ${config?.colors || 'match product'}
+Label size: ${config?.label_size || 'standard hang tag'}
+Include elements: ${Array.isArray(config?.include_elements) ? config.include_elements.join(', ') : String(config?.include_elements || 'brand name, product name')}
+
+Requirements:
+1. Keep product color and design unchanged.
+2. Label should be readable and visually balanced.
+3. Output should look like real product photography.
+4. Professional, high-resolution result.`;
+
+  try {
+    const response = await model.generateContent([
+      { inlineData: { data: imageData, mimeType } },
+      prompt
+    ]);
+
+    const parts = response?.response?.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find((part) => part.inlineData?.data);
+    if (!imagePart?.inlineData?.data) return { success: false, error: 'No image generated' };
+
+    return {
+      success: true,
+      imageData: imagePart.inlineData.data,
+      mimeType: imagePart.inlineData.mimeType || 'image/jpeg'
+    };
+  } catch (error) {
+    throw normalizeGeminiError(error);
+  }
+};
+
+export const measureProductSize = async (productImagePath, productDetails) => {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
+
+  const imageData = await fileToBase64(productImagePath);
+  const mimeType = getMimeType(productImagePath);
+
+  const prompt = `Estimate product measurements from image context and return ONLY valid JSON:
+{
+  "product_type": "${productDetails?.category || 'product'}",
+  "estimated_dimensions": {
+    "length": "...",
+    "width": "...",
+    "height_or_depth": "..."
+  },
+  "size_category": "XS|S|M|L|XL|XXL",
+  "size_range": "S-3XL etc",
+  "body_fit_guide": "how it fits",
+  "measurement_points": ["chest","waist","length"],
+  "size_chart_tip": "buying guidance",
+  "scale_reference": "similar real-world object"
+}`;
+
+  try {
+    const response = await model.generateContent([
+      { inlineData: { data: imageData, mimeType } },
+      prompt
+    ]);
+    const text = response.response.text().replace(/```json|```/g, '').trim();
+    return JSON.parse(text);
+  } catch {
+    return {
+      product_type: productDetails?.category || 'product',
+      estimated_dimensions: {},
+      size_category: 'M',
+      size_range: 'S-3XL',
+      body_fit_guide: '',
+      measurement_points: [],
+      size_chart_tip: '',
+      scale_reference: ''
+    };
+  }
+};
+
 // Image Upscaler using Sharp
 export const upscaleImage = async (imageBuffer, targetWidth = 2400) => {
   const sharp = (await import('sharp')).default;

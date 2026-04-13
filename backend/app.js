@@ -15,6 +15,8 @@ import marketingRoutes from './routes/marketing.js';
 import landingRoutes from './routes/landing.js';
 import generationsRoutes from './routes/generations.js';
 import studioRoutes from './routes/studio.js';
+import videoRoutes from './routes/video.js';
+import labelRoutes from './routes/label.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();
@@ -49,6 +51,8 @@ app.use('/api/marketing', marketingRoutes);
 app.use('/api/landing', landingRoutes);
 app.use('/api/generations', generationsRoutes);
 app.use('/api/studio', studioRoutes);
+app.use('/api/video', videoRoutes);
+app.use('/api/label', labelRoutes);
 
 // Serve uploaded images
 app.use('/uploads', (req, res, next) => {
