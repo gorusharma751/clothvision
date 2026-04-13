@@ -183,6 +183,37 @@ export const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS video_generations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+        video_type VARCHAR(50),
+        script JSONB,
+        frames JSONB,
+        credits_used INTEGER DEFAULT 5,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS label_generations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        product_image TEXT,
+        config JSONB,
+        result_url TEXT,
+        credits_used INTEGER DEFAULT 2,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS admin_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        category VARCHAR(100) NOT NULL,
+        key VARCHAR(200) NOT NULL,
+        value TEXT,
+        description TEXT,
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(category, key)
+      );
+
       CREATE TABLE IF NOT EXISTS scene_builds (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
