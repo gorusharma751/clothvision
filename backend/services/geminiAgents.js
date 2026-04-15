@@ -83,6 +83,77 @@ const getMimeType = (filePath) => {
   return types[ext] || 'image/jpeg';
 };
 
+let adminPrompts = {};
+
+export const setAdminPrompts = (prompts) => {
+  adminPrompts = prompts && typeof prompts === 'object' ? prompts : {};
+};
+
+const getAdminPrompt = (key) => String(adminPrompts?.[key] || '').trim();
+
+const POSE_POOL = {
+  front: [
+    'standing directly facing forward, confident relaxed pose, weight slightly on one leg, arms at sides',
+    'standing facing forward, one hand in pocket, casual stylish pose, slight smile',
+    'standing facing forward, arms crossed confidently, strong posture, looking at camera',
+    'standing facing forward, one hand adjusting collar/cuff, natural casual look',
+    'standing facing forward, slight shoulder turn, hands clasped in front, model pose'
+  ],
+  back: [
+    'turned showing full back view, looking slightly over left shoulder at camera',
+    'back to camera, standing tall, full back view, hands at sides',
+    'back view, relaxed standing, slight head turn right'
+  ],
+  left_side: [
+    '90 degrees left side profile, one arm slightly forward, natural standing pose',
+    'left side view, hand in pocket, casual relaxed profile stance'
+  ],
+  right_side: [
+    '90 degrees right side profile, natural relaxed standing',
+    'right side profile, slight forward lean, confident stance'
+  ],
+  '3_4_front': [
+    '45-degree front-left angle, relaxed model pose, looking directly at camera',
+    'three-quarter front-left angle, hand gesturing toward product detail',
+    '45-degree angle, soft body turn with natural confident expression'
+  ],
+  walking: [
+    'natural walking stride toward camera, confident energetic movement',
+    'walking sideways, candid street fashion style, natural movement',
+    'walking with purpose, mid-stride, hair with natural movement'
+  ]
+};
+
+const BG_POOL = [
+  'clean pure white studio background, professional soft lighting, subtle drop shadow',
+  'very light gray gradient studio background, professional product shot',
+  'soft off-white seamless studio background, gentle shadow',
+  'clean white with very faint warm gradient, premium listing look'
+];
+
+const toSeedIndex = (seed, length) => {
+  const parsed = Number(seed);
+  if (!Number.isFinite(parsed) || length <= 0) return 0;
+  const normalized = Math.abs(Math.trunc(parsed));
+  return normalized % length;
+};
+
+const getPose = (angle, seed = 0) => {
+  const pool = POSE_POOL[angle] || POSE_POOL.front;
+  return pool[toSeedIndex(seed, pool.length)] || POSE_POOL.front[0];
+};
+
+const getBG = (seed = 0) => BG_POOL[toSeedIndex(seed, BG_POOL.length)] || BG_POOL[0];
+
+const buildStrictRules = (productDetails, extra = '') => `
+ABSOLUTE RULES:
+1. PRODUCT COLOR MUST remain exactly "${productDetails?.color || 'as shown in source image'}".
+2. PRODUCT DESIGN details (logos, prints, patterns, stitch lines, buttons, zippers) must remain identical.
+3. FACE/BODY identity must remain unchanged (same person and natural proportions).
+4. Product fit must look realistic and naturally worn.
+5. Product must be clearly visible in output.
+${extra ? `6. EXTRA RULE: ${extra}` : ''}`.trim();
+
 // Agent 1: Product Analyzer
 export const analyzeProduct = async (productImagePath, productDetails) => {
   const genAI = getClient();
@@ -139,7 +210,7 @@ Return ONLY valid JSON, no markdown.`;
 };
 
 // Agent 2: Try-On Generator (model wearing product)
-export const generateTryOn = async (modelImagePath, productImagePath, productDetails, angle = 'front') => {
+export const generateTryOn = async (modelImagePath, productImagePath, productDetails, angle = 'front', options = {}) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
@@ -148,29 +219,35 @@ export const generateTryOn = async (modelImagePath, productImagePath, productDet
   const modelMime = getMimeType(modelImagePath);
   const productMime = getMimeType(productImagePath);
 
-  const angleInstructions = {
-    'front': 'The model is facing directly forward, full body visible, confident pose',
-    'back': 'The model is turned showing the back view completely',
-    'left_side': 'The model is turned 90 degrees showing left side profile',
-    'right_side': 'The model is turned 90 degrees showing right side profile',
-    '3_4_front': 'The model is at a 45-degree angle showing front-left view',
-    '3_4_back': 'The model is at a 45-degree angle showing back-right view',
-    'detail_close': 'Close-up view focusing on the product details and texture'
-  };
+  const variantSeed = Number.isFinite(Number(options?.poseVariant))
+    ? Number(options.poseVariant)
+    : Math.floor(Math.random() * 5);
+  const pose = String(options?.customPose || getPose(angle, variantSeed));
+  const background = String(options?.customBackground || getBG(variantSeed));
+  const strictRulesExtra = String(options?.customRules || getAdminPrompt('strict_rules_extra') || '').trim();
+  const extraInstructions = [getAdminPrompt('tryon_extra'), String(options?.customPromptExtra || '').trim()]
+    .filter(Boolean)
+    .join(' ');
 
   const prompt = `You are an expert AI fashion photographer. Create a photorealistic product try-on image.
 
-CRITICAL REQUIREMENTS:
-1. FACE PRESERVATION: The model's face must remain 100% identical - same facial features, skin tone, eye shape, nose, lips, jawline. DO NOT alter the face in any way.
-2. PRODUCT ACCURACY: The ${productDetails.name} (${productDetails.color || ''} ${productDetails.category}) must look exactly like in the product image - same color, pattern, design, print.
-3. POSE: ${angleInstructions[angle] || angleInstructions['front']}
-4. QUALITY: Professional studio photography, sharp, high resolution, proper lighting
-5. BACKGROUND: Clean white/light gray studio background
-6. The product should fit naturally on the model's body
+${buildStrictRules(productDetails, strictRulesExtra)}
 
-Product details: ${productDetails.name}, ${productDetails.color || ''}, ${productDetails.material || ''}, ${productDetails.description || ''}
+POSE: ${pose}
+ANGLE TARGET: ${angle}
+BACKGROUND: ${background}
+LIGHTING: Professional studio lighting, balanced exposure, sharp focus.
 
-Generate a high-quality, realistic fashion photography image showing the model wearing this exact product from the ${angle} angle.`;
+Product details:
+- Name: ${productDetails?.name || 'Product'}
+- Category: ${productDetails?.category || 'clothing'}
+- Color: ${productDetails?.color || 'as shown'}
+- Material: ${productDetails?.material || 'as shown'}
+- Description: ${productDetails?.description || ''}
+
+${extraInstructions ? `ADDITIONAL REQUIREMENTS: ${extraInstructions}` : ''}
+
+Generate a high-quality, realistic fashion photography image showing the model wearing this exact product.`;
 
   let result;
   try {
@@ -184,13 +261,15 @@ Generate a high-quality, realistic fashion photography image showing the model w
   }
 
   const response = result.response;
-  for (const part of response.candidates[0].content.parts) {
+  const parts = response?.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
     if (part.inlineData) {
       return {
         success: true,
         imageData: part.inlineData.data,
         mimeType: part.inlineData.mimeType,
-        angle
+        angle,
+        pose
       };
     }
   }
@@ -199,7 +278,7 @@ Generate a high-quality, realistic fashion photography image showing the model w
 };
 
 // Agent 3: Background Generator (no model)
-export const generateProductBG = async (productImagePath, productDetails, bgStyle = 'studio') => {
+export const generateProductBG = async (productImagePath, productDetails, bgStyle = 'studio', options = {}) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
@@ -210,8 +289,14 @@ export const generateProductBG = async (productImagePath, productDetails, bgStyl
     'studio': 'clean white studio background with soft shadows, professional product photography',
     'lifestyle': 'modern lifestyle background matching the product aesthetic, premium feel',
     'gradient': 'elegant gradient background, luxury product photography',
-    'flat_lay': 'flat lay product photography on clean surface with minimal props'
+    'flat_lay': 'flat lay product photography on clean surface with minimal props',
+    'premium_quality': 'clean white background with elegant "Premium Quality" gold calligraphy and 5 gold stars, premium catalog style'
   };
+
+  const selectedBackground = String(options?.customBGDescription || bgPrompts[bgStyle] || bgPrompts.studio);
+  const strictRulesExtra = String(options?.customRules || getAdminPrompt('strict_rules_extra') || '').trim();
+  const adminExtra = getAdminPrompt('bg_extra');
+  const customExtra = String(options?.customPromptExtra || '').trim();
 
   const prompt = `Professional product photographer. Create a stunning product image.
 
@@ -219,12 +304,16 @@ Product: ${productDetails.name}
 Category: ${productDetails.category}
 Color: ${productDetails.color || 'as shown'}
 
+${buildStrictRules(productDetails, strictRulesExtra)}
+
 Requirements:
 1. Keep the product EXACTLY as shown - same color, design, shape, all details preserved
-2. Background: ${bgPrompts[bgStyle] || bgPrompts['studio']}
+2. Background: ${selectedBackground}
 3. Professional lighting that highlights product features
 4. High resolution, sharp, e-commerce ready
 5. Product centered and properly displayed
+${adminExtra ? `Admin extra: ${adminExtra}` : ''}
+${customExtra ? `Extra: ${customExtra}` : ''}
 
 Generate a professional e-commerce product photo.`;
 
@@ -253,7 +342,7 @@ Generate a professional e-commerce product photo.`;
 };
 
 // Agent 4: Customer Try-On
-export const generateCustomerTryOn = async (customerImagePath, productImagePath, productDetails) => {
+export const generateCustomerTryOn = async (customerImagePath, productImagePath, productDetails, options = {}) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
@@ -265,7 +354,11 @@ export const generateCustomerTryOn = async (customerImagePath, productImagePath,
   const results = [];
   const angles = ['front', '3_4_front'];
 
-  for (const angle of angles) {
+  for (const [index, angle] of angles.entries()) {
+    const pose = getPose(angle, index);
+    const extraInstructions = [getAdminPrompt('tryon_extra'), String(options?.customPromptExtra || '').trim()]
+      .filter(Boolean)
+      .join(' ');
     const prompt = `Virtual try-on specialist. Show this customer wearing this product.
 
 CRITICAL:
@@ -273,8 +366,10 @@ CRITICAL:
 2. Product: Apply EXACTLY as shown - same color, design, pattern, texture
 3. Make it look completely natural and realistic
 4. ${angle === 'front' ? 'Front facing view' : '3/4 angle view'}
+5. Pose guidance: ${pose}
 5. Professional lighting, clean background
 6. The fit should look natural on the customer's body type
+${extraInstructions ? `7. Additional instructions: ${extraInstructions}` : ''}
 
 This is for a virtual try-on feature for a clothing store.`;
 
@@ -383,7 +478,7 @@ const view360AngleInstructions = {
   right_side: 'right-side profile view with natural perspective'
 };
 
-export const generate360View = async (productImagePath, modelImagePath, productDetails) => {
+export const generate360View = async (productImagePath, modelImagePath, productDetails, options = {}) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getImageModelName() });
 
@@ -395,7 +490,9 @@ export const generate360View = async (productImagePath, modelImagePath, productD
   const angles = ['front', 'left_side', 'back', 'right_side'];
   const results = [];
 
-  for (const angle of angles) {
+  for (const [index, angle] of angles.entries()) {
+    const pose = getPose(angle, index);
+    const customExtra = String(options?.customPromptExtra || '').trim();
     const prompt = `Professional 360 product photography.
 
 CRITICAL REQUIREMENTS:
@@ -410,6 +507,8 @@ Category: ${productDetails?.category || 'item'}
 Color: ${productDetails?.color || 'as shown'}
 
 Angle instruction: ${view360AngleInstructions[angle] || view360AngleInstructions.front}
+Pose guidance: ${pose}
+${customExtra ? `Extra instructions: ${customExtra}` : ''}
 
 Generate one high-quality e-commerce image for this specific angle.`;
 
@@ -439,9 +538,12 @@ Generate one high-quality e-commerce image for this specific angle.`;
   return results;
 };
 
-export const generateVideoScript = async (productDetails, videoType = 'showcase') => {
+export const generateVideoScript = async (productDetails, videoType = 'showcase', options = {}) => {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: getTextModelName() });
+
+  const adminVideoPrompt = getAdminPrompt('video_extra');
+  const customVideoPrompt = String(options?.customVideoPrompt || '').trim();
 
   const typePrompt = {
     showcase: 'premium product showcase',
@@ -461,6 +563,8 @@ Product:
 - Description: ${productDetails?.description || 'N/A'}
 
 Video type: ${typePrompt[videoType] || typePrompt.showcase}
+${adminVideoPrompt ? `Admin style note: ${adminVideoPrompt}` : ''}
+${customVideoPrompt ? `Custom style note: ${customVideoPrompt}` : ''}
 
 Return ONLY valid JSON in this schema:
 {
@@ -535,6 +639,67 @@ Requirements:
     };
   } catch (error) {
     throw normalizeGeminiError(error);
+  }
+};
+
+export const generateAIPrompt = async (productImagePath, productDetails, promptType = 'tryon') => {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: getTextModelName() });
+
+  const imageData = await fileToBase64(productImagePath);
+  const mimeType = getMimeType(productImagePath);
+
+  const typeMap = {
+    tryon: 'fashion try-on e-commerce photography prompt',
+    scene: 'product scene composition and background placement prompt',
+    marketing: 'marketing poster/ad visual creation prompt',
+    video: 'product video script and motion prompt for AI video generators'
+  };
+
+  const prompt = `You are an AI photography prompt engineer.
+
+Analyze this product and generate ${typeMap[promptType] || typeMap.tryon}.
+
+Product:
+- Name: ${productDetails?.name || 'Product'}
+- Category: ${productDetails?.category || 'clothing'}
+- Color: ${productDetails?.color || 'as shown'}
+- Description: ${productDetails?.description || ''}
+
+Return ONLY valid JSON:
+{
+  "main_prompt": "complete detailed ready-to-use prompt",
+  "color_note": "color preservation instruction",
+  "pose_suggestions": ["pose1", "pose2", "pose3"],
+  "background_suggestions": ["bg1", "bg2", "bg3"],
+  "style_tips": "styling advice",
+  "platform_specific": {
+    "flipkart": "tip",
+    "amazon": "tip",
+    "instagram": "tip"
+  }
+}`;
+
+  try {
+    const response = await model.generateContent([
+      { inlineData: { data: imageData, mimeType } },
+      prompt
+    ]);
+    const text = response.response.text().replace(/```json|```/g, '').trim();
+    return JSON.parse(text);
+  } catch {
+    return {
+      main_prompt: `Professional ${productDetails?.category || 'product'} photography with exact color preservation and clean studio background.`,
+      color_note: `Keep ${productDetails?.color || 'original'} color identical to source image.`,
+      pose_suggestions: ['Front facing', 'Side profile', '3/4 angle'],
+      background_suggestions: ['White studio', 'Lifestyle setup', 'Premium gradient'],
+      style_tips: 'Keep product fully visible with sharp details.',
+      platform_specific: {
+        flipkart: 'Use clean white listing background.',
+        amazon: 'Prioritize front-facing hero image with clear details.',
+        instagram: 'Use lifestyle framing and dynamic composition.'
+      }
+    };
   }
 };
 

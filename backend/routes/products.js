@@ -6,7 +6,18 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../database.js';
 import { authenticate } from '../middleware/auth.js';
-import { analyzeProduct, generateTryOn, generateProductBG, generateCustomerTryOn, generateProductContent, generate360View, measureProductSize, upscaleImage } from '../services/geminiAgents.js';
+import {
+  analyzeProduct,
+  generateTryOn,
+  generateProductBG,
+  generateCustomerTryOn,
+  generateProductContent,
+  generate360View,
+  measureProductSize,
+  upscaleImage,
+  generateAIPrompt,
+  setAdminPrompts
+} from '../services/geminiAgents.js';
 import { uploadToCloudinary, uploadFileToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
 
 const router = express.Router();
@@ -93,6 +104,20 @@ const saveUploadedFile = async (filePath, userId) => {
   }
 
   return filePath;
+};
+
+const loadAdminPrompts = async () => {
+  try {
+    const { rows } = await query("SELECT key, value FROM admin_settings WHERE category='ai_prompts'");
+    const prompts = {};
+    for (const row of rows) {
+      prompts[row.key] = row.value;
+    }
+    setAdminPrompts(prompts);
+  } catch (err) {
+    console.error('Failed loading admin prompts:', err.message);
+    setAdminPrompts({});
+  }
 };
 
 // List products
@@ -279,6 +304,7 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
   const taskId = uuidv4();
   
   try {
+    await loadAdminPrompts();
     const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
     const product = products[0];
@@ -295,9 +321,12 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
     
     const results = [];
     const generationErrors = [];
-    for (const angle of angleList) {
+    for (const [index, angle] of angleList.entries()) {
       try {
-        const result = await generateTryOn(req.file.path, product.original_image, product, angle);
+        const result = await generateTryOn(req.file.path, product.original_image, product, angle, {
+          poseVariant: index,
+          customPromptExtra: req.body.custom_prompt_extra || ''
+        });
         if (result.success) {
           const imageBuffer = Buffer.from(result.imageData, 'base64');
           const savedUrl = await saveImage(imageBuffer, req.user.id, `gen_${uuidv4()}.jpg`);
@@ -312,7 +341,7 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
               savedUrl,
               platform || 'general',
               costs.credits_per_image,
-              JSON.stringify({ task_id: taskId, task_kind: 'tryon', angle })
+              JSON.stringify({ task_id: taskId, task_kind: 'tryon', angle, pose: result.pose || null })
             ]
           );
           results.push(rows[0]);
@@ -363,6 +392,7 @@ router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
 router.post('/:id/generate-360', upload.single('model_image'), async (req, res) => {
   const taskId = uuidv4();
   try {
+    await loadAdminPrompts();
     const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
     const product = products[0];
@@ -371,7 +401,9 @@ router.post('/:id/generate-360', upload.single('model_image'), async (req, res) 
     const totalCredits = 4 * costs.credits_per_image;
     await ensureCreditsAvailable(req.user.id, totalCredits);
 
-    const results = await generate360View(product.original_image, req.file?.path || null, product);
+    const results = await generate360View(product.original_image, req.file?.path || null, product, {
+      customPromptExtra: req.body.custom_prompt_extra || ''
+    });
     if (!results.length) throw new Error('360 generation failed');
 
     const savedImages = [];
@@ -413,6 +445,8 @@ router.post('/generate-360-direct', upload.fields([{ name: 'product_image' }, { 
   try {
     if (!req.files?.product_image) return res.status(400).json({ error: 'Product image required' });
 
+    await loadAdminPrompts();
+
     const costs = await getCreditCosts(req.user.id);
     const totalCredits = 4 * costs.credits_per_image;
     await ensureCreditsAvailable(req.user.id, totalCredits);
@@ -425,7 +459,9 @@ router.post('/generate-360-direct', upload.fields([{ name: 'product_image' }, { 
 
     const productImagePath = req.files.product_image[0].path;
     const modelImagePath = req.files?.model_image?.[0]?.path || null;
-    const results = await generate360View(productImagePath, modelImagePath, productDetails);
+    const results = await generate360View(productImagePath, modelImagePath, productDetails, {
+      customPromptExtra: req.body.custom_prompt_extra || ''
+    });
 
     if (!results.length) throw new Error('360 generation failed');
 
@@ -474,6 +510,7 @@ router.post('/:id/generate-bg', async (req, res) => {
   let movedToProcessing = false;
   const taskId = uuidv4();
   try {
+    await loadAdminPrompts();
     const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
     const product = products[0];
@@ -485,7 +522,10 @@ router.post('/:id/generate-bg', async (req, res) => {
     await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', product.id]);
     movedToProcessing = true;
     
-    const result = await generateProductBG(product.original_image, product, bg_style || 'studio');
+    const result = await generateProductBG(product.original_image, product, bg_style || 'studio', {
+      customPromptExtra: req.body.custom_prompt_extra || '',
+      customBGDescription: req.body.custom_bg_description || ''
+    });
     if (!result.success) throw new Error('Image generation failed');
 
     await useCredits(req.user.id, costs.credits_per_image);
@@ -554,6 +594,39 @@ router.post('/:id/analyze', async (req, res) => {
     const analysis = await analyzeProduct(rows[0].original_image, rows[0]);
     res.json(analysis);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:id/generate-prompt', async (req, res) => {
+  const { prompt_type } = req.body;
+  try {
+    const { rows } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Product not found' });
+    await loadAdminPrompts();
+    const suggestion = await generateAIPrompt(rows[0].original_image, rows[0], prompt_type || 'tryon');
+    res.json(suggestion);
+  } catch (err) {
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
+});
+
+router.post('/generate-prompt-direct', upload.single('product_image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Product image required' });
+
+    await loadAdminPrompts();
+
+    const details = {
+      name: req.body.name || req.body.product_name || 'Product',
+      category: req.body.category || req.body.product_category || 'clothing',
+      color: req.body.color || req.body.product_color || '',
+      description: req.body.description || ''
+    };
+
+    const suggestion = await generateAIPrompt(req.file.path, details, req.body.prompt_type || 'tryon');
+    res.json(suggestion);
+  } catch (err) {
+    res.status(getErrorStatusCode(err)).json({ error: err.message });
+  }
 });
 
 // Upscale image
@@ -674,6 +747,7 @@ router.get('/:id/images', async (req, res) => {
 router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name: 'product_photo' }]), async (req, res) => {
   try {
     if (!req.files?.customer_photo || !req.files?.product_photo) return res.status(400).json({ error: 'Both photos required' });
+    await loadAdminPrompts();
     
     const costs = await getCreditCosts(req.user.id);
     await ensureCreditsAvailable(req.user.id, costs.tryon_credits);
@@ -684,7 +758,8 @@ router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name
     const results = await generateCustomerTryOn(
       req.files.customer_photo[0].path,
       req.files.product_photo[0].path,
-      productDetails
+      productDetails,
+      { customPromptExtra: req.body.custom_prompt_extra || '' }
     );
 
     if (!results.length) throw new Error('No try-on images generated. Check Vertex AI quota/billing and retry.');
