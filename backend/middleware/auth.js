@@ -4,9 +4,11 @@ import { query } from '../database.js';
 export const authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token provided' });
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) return res.status(500).json({ error: 'Server misconfiguration: JWT_SECRET is missing' });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'clothvision_secret');
+    const decoded = jwt.verify(token, jwtSecret);
 
     const { rows } = await query('SELECT id, email, role FROM users WHERE id=$1', [decoded.id]);
     if (!rows.length) {

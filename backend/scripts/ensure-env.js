@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendRoot = path.resolve(__dirname, '..');
 const envExamplePath = path.join(backendRoot, '.env.example');
-const envPath = path.join(backendRoot, '.env');
+const isProduction = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+const envFileName = isProduction ? '.env' : '.env.local';
+const envPath = path.join(backendRoot, envFileName);
 
 const parseEnvKeys = (content) => {
   return content
@@ -25,7 +27,7 @@ const exampleKeys = parseEnvKeys(exampleContent);
 
 if (!fs.existsSync(envPath)) {
   fs.writeFileSync(envPath, `${exampleContent.trim()}\n`, 'utf8');
-  console.log('Created backend/.env from backend/.env.example');
+  console.log(`Created backend/${envFileName} from backend/.env.example`);
   process.exit(0);
 }
 
@@ -54,4 +56,4 @@ for (const key of missingKeys) {
 }
 
 fs.appendFileSync(envPath, `${appendLines.join('\n')}\n`, 'utf8');
-console.log(`Appended ${missingKeys.length} missing env key(s) to backend/.env`);
+console.log(`Appended ${missingKeys.length} missing env key(s) to backend/${envFileName}`);

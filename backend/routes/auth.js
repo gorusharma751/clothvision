@@ -9,6 +9,8 @@ const router = express.Router();
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) return res.status(500).json({ error: 'Server misconfiguration: JWT_SECRET is missing' });
   try {
     const { rows } = await query(`
       SELECT u.*, s.name as shop_name, s.logo_url, s.theme, s.plan,
@@ -21,7 +23,7 @@ router.post('/login', async (req, res) => {
     const user = rows[0];
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'clothvision_secret', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, jwtSecret, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, shop_name: user.shop_name, logo_url: user.logo_url, theme: user.theme, plan: user.plan, credits: user.credits } });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

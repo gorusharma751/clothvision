@@ -65,13 +65,17 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }
 
 const createAdmin = async () => {
   try {
-    const email = process.env.ADMIN_EMAIL || 'admin@clothvision.com';
-    const password = process.env.ADMIN_PASSWORD || 'Admin@123';
+    const email = String(process.env.ADMIN_EMAIL || '').trim();
+    const password = String(process.env.ADMIN_PASSWORD || '').trim();
+    if (!email || !password) {
+      console.warn('Skipping admin bootstrap: ADMIN_EMAIL or ADMIN_PASSWORD is not set.');
+      return;
+    }
     const { rows } = await query('SELECT id FROM users WHERE email=$1', [email]);
     if (!rows.length) {
       const hashed = await bcrypt.hash(password, 10);
       await query('INSERT INTO users (email, password, name, role) VALUES ($1,$2,$3,$4)', [email, hashed, 'Super Admin', 'admin']);
-      console.log(`✅ Admin created: ${email} / ${password}`);
+      console.log(`✅ Admin created: ${email}`);
     }
   } catch (err) {
     console.error('Admin create error:', err.message);

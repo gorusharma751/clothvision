@@ -2,8 +2,11 @@ import pg from 'pg';
 import './loadEnv.js';
 
 const { Pool } = pg;
-const localFallbackDbUrl = 'postgresql://postgres:postgres@localhost:5432/clothvision';
-const databaseUrl = String(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || localFallbackDbUrl).trim();
+const databaseUrl = String(process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || '').trim();
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is not set. Use backend/.env.local for development or backend/.env for production.');
+}
 
 const shouldUseSsl = () => {
   const explicit = String(process.env.DB_SSL || '').trim().toLowerCase();
@@ -46,7 +49,7 @@ const normalizeDbConnectionError = (error) => {
       const isLocalHost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
       if (isLocalHost) {
         return new Error(
-          `Postgres password authentication failed for local user "${parsed.username}". Update DATABASE_URL in backend/.env with your actual PostgreSQL password. Current URL: ${connectionLabel}`
+          `Postgres password authentication failed for local user "${parsed.username}". Update DATABASE_URL in backend/.env.local with your actual PostgreSQL password. Current URL: ${connectionLabel}`
         );
       }
     } catch {
@@ -73,11 +76,6 @@ const pool = new Pool({
 export const query = (text, params) => pool.query(text, params);
 
 export const initDB = async () => {
-  const isUsingLocalFallback = databaseUrl === localFallbackDbUrl;
-  if (process.env.NODE_ENV === 'production' && isUsingLocalFallback) {
-    throw new Error('DATABASE_URL is not set for production. Set a real Postgres connection string (not localhost).');
-  }
-
   let client;
   try {
     client = await pool.connect();
