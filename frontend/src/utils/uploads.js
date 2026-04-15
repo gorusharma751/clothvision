@@ -1,6 +1,6 @@
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
 
-const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295.herokuapp.com');
+const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295-ffca10cd1c59.herokuapp.com');
 const UPLOADS_BASE_URL = trimTrailingSlash(
   import.meta.env.VITE_UPLOADS_BASE_URL || API_ORIGIN
 );
@@ -23,7 +23,7 @@ export const buildUploadUrl = (storedPath) => {
     try {
       const parsed = new URL(value);
       const pathname = String(parsed.pathname || '').replace(/\\/g, '/');
-      const isLocalUploadsPath = pathname.startsWith('/uploads/') || pathname.startsWith('/api/uploads/');
+      const isLocalUploadsPath = pathname.startsWith('/uploads/');
       if (!isLocalUploadsPath) return value;
     } catch {
       return value;

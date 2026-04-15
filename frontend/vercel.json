@@ -4,15 +4,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://clothvision-production.up.railway.app/api/:path*"
-    },
-    {
-      "source": "/uploads/:path*",
-      "destination": "https://clothvision-production.up.railway.app/uploads/:path*"
-    },
-    {
-      "source": "/((?!api/)(?!uploads/)(?!.*\\..*).*)",
+      "source": "/((?!.*\\..*).*)",
       "destination": "/index.html"
     }
   ]

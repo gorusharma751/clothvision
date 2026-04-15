@@ -2,7 +2,7 @@ import axios from 'axios';
 import { buildUploadUrl } from './uploads';
 
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
-const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295.herokuapp.com');
+const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295-ffca10cd1c59.herokuapp.com');
 const API_BASE_URL = `${API_ORIGIN}/api`;
 
 const api = axios.create({ baseURL: API_BASE_URL, timeout: 120000 });
