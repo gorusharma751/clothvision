@@ -10,6 +10,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import AdminOwners from './pages/admin/Owners';
 import AdminCredits from './pages/admin/Credits';
 import AdminSettings from './pages/admin/Settings';
+import PromptSettings from './pages/admin/PromptSettings';
 import OwnerDashboard from './pages/owner/Dashboard';
 import OwnerProducts from './pages/owner/Products';
 import OwnerGeneratedGallery from './pages/owner/GeneratedGallery';
@@ -53,6 +54,7 @@ function AppRoutes() {
       <Route path="/admin/owners" element={<Guard role="admin"><AdminOwners/></Guard>}/>
       <Route path="/admin/credits" element={<Guard role="admin"><AdminCredits/></Guard>}/>
       <Route path="/admin/settings" element={<Guard role="admin"><AdminSettings/></Guard>}/>
+      <Route path="/admin/prompts" element={<Guard role="admin"><PromptSettings/></Guard>}/>
       <Route path="/admin/landing" element={<Guard role="admin"><LandingCMS/></Guard>}/>
       <Route path="/owner" element={<Guard role="owner"><OwnerDashboard/></Guard>}/>
       <Route path="/owner/products" element={<Guard role="owner"><OwnerProducts/></Guard>}/>

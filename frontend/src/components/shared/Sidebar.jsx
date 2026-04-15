@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight, Images, Globe, Megaphone, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const adminNav=[{to:'/admin',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/admin/owners',icon:Users,label:'Shop Owners'},{to:'/admin/credits',icon:CreditCard,label:'Credits'},{to:'/admin/settings',icon:Settings,label:'Settings'},{to:'/admin/landing',icon:Globe,label:'Landing Page'}];
+const adminNav=[{to:'/admin',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/admin/owners',icon:Users,label:'Shop Owners'},{to:'/admin/credits',icon:CreditCard,label:'Credits'},{to:'/admin/settings',icon:Settings,label:'Settings'},{to:'/admin/prompts',icon:Wand2,label:'Prompt Settings'},{to:'/admin/landing',icon:Globe,label:'Landing Page'}];
 const ownerNav=[{to:'/',icon:Home,label:'Home',exact:true},{to:'/owner',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/owner/studio',icon:Wand2,label:'AI Studio'},{to:'/owner/studio/marketing',icon:Megaphone,label:'Marketing Studio'},{to:'/owner/products',icon:Package,label:'Products'},{to:'/owner/generated',icon:Images,label:'Generated Gallery'},{to:'/owner/credits',icon:Coins,label:'Credits'}];
 const COLLAPSE_KEY = 'cv_sidebar_collapsed';
 
