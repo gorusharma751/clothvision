@@ -1,10 +1,8 @@
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
 
-const envApiBase = trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '');
-const isVercelHosted = typeof window !== 'undefined' && /(?:^|\.)vercel\.app$/i.test(window.location.hostname);
-const API_BASE_URL = isVercelHosted ? '/api' : envApiBase;
+const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295.herokuapp.com');
 const UPLOADS_BASE_URL = trimTrailingSlash(
-  import.meta.env.VITE_UPLOADS_BASE_URL || (API_BASE_URL ? API_BASE_URL.replace(/\/api$/, '') : '')
+  import.meta.env.VITE_UPLOADS_BASE_URL || API_ORIGIN
 );
 
 const normalizeRelativeUploadPath = (storedPath = '') => {
