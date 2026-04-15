@@ -1,6 +1,9 @@
 const trimTrailingSlash = (value = '') => String(value).trim().replace(/\/+$/, '');
 
-const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || 'https://safe-brushlands-32295-ffca10cd1c59.herokuapp.com');
+const DEFAULT_API_ORIGIN = import.meta.env.DEV
+  ? 'http://localhost:5000'
+  : 'https://safe-brushlands-32295-ffca10cd1c59.herokuapp.com';
+const API_ORIGIN = trimTrailingSlash(import.meta.env.VITE_API_URL || DEFAULT_API_ORIGIN);
 const UPLOADS_BASE_URL = trimTrailingSlash(
   import.meta.env.VITE_UPLOADS_BASE_URL || API_ORIGIN
 );

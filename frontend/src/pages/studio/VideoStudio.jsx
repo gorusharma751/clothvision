@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, Copy, Check, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api, { getImageUrl } from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 function UploadBox({ preview, onFile, onRemove }) {
   const onDrop = useCallback((files) => {
@@ -62,6 +63,7 @@ function UploadBox({ preview, onFile, onRemove }) {
 
 export default function VideoStudio() {
   const nav = useNavigate();
+  const { refreshUser } = useAuth();
 
   const [productFile, setProductFile] = useState(null);
   const [productPreview, setProductPreview] = useState(null);
@@ -76,7 +78,13 @@ export default function VideoStudio() {
 
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressLabel, setProgressLabel] = useState('Preparing...');
   const [captionCopied, setCaptionCopied] = useState(false);
+
+  const progressTimerRef = useRef(null);
+  const progressStartRef = useRef(0);
 
   const orderedScenes = useMemo(() => {
     const storyboard = result?.script?.storyboard;
@@ -84,11 +92,76 @@ export default function VideoStudio() {
     return storyboard;
   }, [result]);
 
+  const resolveAssetUrl = useCallback((rawUrl) => {
+    if (!rawUrl) return null;
+    const value = String(rawUrl || '').trim();
+    if (!value) return null;
+    if (value.startsWith('http') || value.startsWith('blob:')) return value;
+    return getImageUrl(value);
+  }, []);
+
+  const clearVideoUrl = useCallback(() => {
+    setVideoUrl(null);
+  }, []);
+
+  const resolvedVideoUrl = useMemo(() => {
+    if (videoUrl) return videoUrl;
+    return resolveAssetUrl(result?.video_url);
+  }, [videoUrl, result?.video_url, resolveAssetUrl]);
+
+  const updateProgressByElapsed = useCallback((elapsedSec) => {
+    if (elapsedSec < 8) {
+      setProgressLabel('Analyzing product and ad objective...');
+      setProgressValue(Math.min(26, 8 + elapsedSec * 2.2));
+      return;
+    }
+
+    if (elapsedSec < 24) {
+      setProgressLabel('Generating script and storyboard...');
+      setProgressValue(Math.min(48, 26 + (elapsedSec - 8) * 1.4));
+      return;
+    }
+
+    if (elapsedSec < 60) {
+      setProgressLabel('Rendering cinematic keyframes...');
+      setProgressValue(Math.min(72, 48 + (elapsedSec - 24) * 0.66));
+      return;
+    }
+
+    setProgressLabel('Generating final AI video with model...');
+    setProgressValue((current) => Math.min(95, Math.max(current, 72 + (elapsedSec - 60) * 0.28)));
+  }, []);
+
+  const clearProgressTicker = useCallback(() => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  }, []);
+
+  const startProgressTicker = useCallback(() => {
+    clearProgressTicker();
+    progressStartRef.current = Date.now();
+    setProgressValue(8);
+    setProgressLabel('Uploading inputs and starting generation...');
+
+    progressTimerRef.current = setInterval(() => {
+      const elapsedSec = (Date.now() - progressStartRef.current) / 1000;
+      updateProgressByElapsed(elapsedSec);
+    }, 900);
+  }, [clearProgressTicker, updateProgressByElapsed]);
+
+  useEffect(() => {
+    return () => clearProgressTicker();
+  }, [clearProgressTicker]);
+
   const onGenerate = async () => {
     if (!productFile) return toast.error('Upload product image first');
 
     setGenerating(true);
     setResult(null);
+    clearVideoUrl();
+    startProgressTicker();
 
     try {
       const formData = new FormData();
@@ -102,14 +175,26 @@ export default function VideoStudio() {
       formData.append('cta', cta);
 
       const response = await api.post('/studio/video', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 600000
       });
 
       setResult(response.data);
-      toast.success(`Video plan ready. Used ${response.data.credits_used} credits.`);
+
+      const serverVideoUrl = resolveAssetUrl(response.data?.video_url);
+      if (serverVideoUrl) {
+        setVideoUrl(serverVideoUrl);
+        setProgressValue(100);
+        setProgressLabel('AI video ready.');
+        toast.success(`AI video ready. Used ${response.data.credits_used} credits.`);
+        refreshUser?.().catch(() => {});
+      } else {
+        toast.error('AI model did not return a playable video URL. Please verify model access and retry.');
+      }
     } catch (err) {
       toast.error(err.response?.data?.error || 'Video generation failed');
     } finally {
+      clearProgressTicker();
       setGenerating(false);
     }
   };
@@ -124,7 +209,7 @@ export default function VideoStudio() {
   };
 
   const downloadImage = (rawUrl) => {
-    const url = String(rawUrl || '').startsWith('http') ? rawUrl : getImageUrl(rawUrl);
+    const url = resolveAssetUrl(rawUrl);
     if (!url) return;
     const a = document.createElement('a');
     a.href = url;
@@ -132,10 +217,20 @@ export default function VideoStudio() {
     a.click();
   };
 
+  const downloadVideo = () => {
+    const url = resolvedVideoUrl;
+    if (!url) return;
+    const ext = /\.mp4(\?|$)/i.test(url) ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `video_${Date.now()}.${ext}`;
+    a.click();
+  };
+
   return (
     <Layout
       title="Video Studio"
-      subtitle="Generate short-video script + keyframes for Luma, Runway, or Kling"
+      subtitle="Generate complete AI video plus script and keyframes"
       actions={
         <button
           onClick={() => nav('/owner/studio')}
@@ -197,15 +292,35 @@ export default function VideoStudio() {
           <input className="cv-input" value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Call to action" />
 
           <button className="btn-primary" onClick={onGenerate} disabled={generating || !productFile} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-            {generating ? 'Generating...' : <><Wand2 size={14} />Generate Script + Keyframes (5 credits)</>}
+            {generating ? 'Generating AI video...' : <><Wand2 size={14} />Generate Complete AI Video (5 credits)</>}
           </button>
+
+          {generating && (
+            <div style={{ marginTop: 10, borderRadius: 10, border: '1px solid rgba(124,58,237,.22)', background: 'rgba(124,58,237,.08)', padding: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <p style={{ color: 'rgba(226,226,240,.9)', fontSize: 12, fontWeight: 600 }}>{progressLabel}</p>
+                <p style={{ color: '#a78bfa', fontSize: 12, fontWeight: 700 }}>{Math.round(progressValue)}%</p>
+              </div>
+              <div style={{ width: '100%', height: 8, borderRadius: 999, overflow: 'hidden', background: 'rgba(124,58,237,.18)' }}>
+                <div
+                  style={{
+                    width: `${Math.max(0, Math.min(100, progressValue))}%`,
+                    height: '100%',
+                    borderRadius: 999,
+                    background: 'linear-gradient(90deg,#7c3aed,#a78bfa)',
+                    transition: 'width .5s ease'
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 16 }}>
           <p style={{ fontFamily: 'Syne,sans-serif', letterSpacing: '.1em', fontSize: 11, color: 'rgba(239,68,68,.6)', marginBottom: 10 }}>OUTPUT</p>
 
           {!result && (
-            <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 13 }}>Generate to see storyboard, caption, hashtags, and keyframes.</p>
+            <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 13 }}>Generate to see the full AI video, storyboard, caption, hashtags, and keyframes.</p>
           )}
 
           {result?.script && (
@@ -249,6 +364,31 @@ export default function VideoStudio() {
                       {tag}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {resolvedVideoUrl && (
+                <div style={{ border: '1px solid rgba(239,68,68,.25)', borderRadius: 12, padding: 10, background: 'rgba(239,68,68,.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, color: 'rgba(239,68,68,.75)', fontFamily: 'Syne,sans-serif', letterSpacing: '.08em' }}>VIDEO</p>
+                    {resolvedVideoUrl && (
+                      <button
+                        onClick={downloadVideo}
+                        style={{ border: '1px solid rgba(239,68,68,.35)', background: 'transparent', color: '#f87171', borderRadius: 8, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', cursor: 'pointer' }}
+                      >
+                        <Download size={11} />Download
+                      </button>
+                    )}
+                  </div>
+
+                  {resolvedVideoUrl && (
+                    <video
+                      controls
+                      playsInline
+                      src={resolvedVideoUrl}
+                      style={{ width: '100%', borderRadius: 10, border: '1px solid rgba(239,68,68,.2)', background: '#000', maxHeight: 320 }}
+                    />
+                  )}
                 </div>
               )}
 

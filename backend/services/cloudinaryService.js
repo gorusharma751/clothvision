@@ -54,3 +54,24 @@ export const uploadFileToCloudinary = async (filePath, options = {}) => {
   });
   return result.secure_url;
 };
+
+// Upload video buffer to Cloudinary -> returns secure URL
+export const uploadVideoToCloudinary = async (buffer, options = {}) => {
+  configureCloudinary();
+  if (!isCloudinaryEnabled()) return null;
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: options.folder || 'clothvision/videos',
+        resource_type: 'video',
+        ...options
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
+      }
+    );
+    Readable.from(buffer).pipe(stream);
+  });
+};
