@@ -139,25 +139,109 @@ router.get('/', async (req, res) => {
 router.get('/generated', async (req, res) => {
   try {
     const { rows } = await query(`
-      SELECT
-        gi.id,
-        gi.product_id,
-        gi.image_type,
-        gi.angle,
-        gi.platform,
-        gi.image_url,
-        gi.upscaled_url,
-        COALESCE(gi.upscaled_url, gi.image_url) AS final_image_url,
-        COALESCE(gi.metadata->>'task_id', gi.id::text) AS task_id,
-        COALESCE(gi.metadata->>'task_kind', gi.image_type) AS task_kind,
-        gi.created_at,
-        p.name AS product_name,
-        p.category AS product_category,
-        p.original_image AS product_original_image
-      FROM generated_images gi
-      JOIN products p ON p.id = gi.product_id
-      WHERE gi.owner_id = $1
-      ORDER BY gi.created_at DESC
+      SELECT *
+      FROM (
+        SELECT
+          gi.id::text AS id,
+          COALESCE(gi.product_id::text, gi.id::text) AS product_id,
+          gi.image_type,
+          gi.angle,
+          gi.platform,
+          gi.image_url,
+          gi.upscaled_url,
+          COALESCE(gi.upscaled_url, gi.image_url) AS final_image_url,
+          COALESCE(gi.metadata->>'task_id', gi.id::text) AS task_id,
+          COALESCE(gi.metadata->>'task_kind', gi.image_type) AS task_kind,
+          gi.created_at,
+          p.name AS product_name,
+          p.category AS product_category,
+          p.original_image AS product_original_image,
+          'image'::text AS media_type,
+          NULL::text AS video_url,
+          NULL::text AS thumbnail_url,
+          (p.id IS NOT NULL) AS listing_supported
+        FROM generated_images gi
+        LEFT JOIN products p ON p.id = gi.product_id
+        WHERE gi.owner_id = $1
+
+        UNION ALL
+
+        SELECT
+          vg.id::text AS id,
+          COALESCE(vg.product_id::text, CONCAT('video-', vg.id::text)) AS product_id,
+          'video'::text AS image_type,
+          NULL::text AS angle,
+          vg.video_type AS platform,
+          first_frame.frame_url AS image_url,
+          NULL::text AS upscaled_url,
+          COALESCE(first_frame.frame_url, vg.script->>'video_url') AS final_image_url,
+          vg.id::text AS task_id,
+          'video'::text AS task_kind,
+          vg.created_at,
+          COALESCE(vg.script->>'product_name', vg.script->>'brand_name', 'Video Generation') AS product_name,
+          COALESCE(vg.script->>'product_category', 'video') AS product_category,
+          NULL::text AS product_original_image,
+          'video'::text AS media_type,
+          vg.script->>'video_url' AS video_url,
+          first_frame.frame_url AS thumbnail_url,
+          (vg.product_id IS NOT NULL) AS listing_supported
+        FROM video_generations vg
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(
+            NULLIF(frame->>'generated_url', ''),
+            NULLIF(frame->>'url', ''),
+            NULLIF(frame->>'image_url', ''),
+            NULLIF(frame->>'final_image_url', '')
+          ) AS frame_url
+          FROM jsonb_array_elements(COALESCE(vg.frames, '[]'::jsonb)) frame
+          WHERE COALESCE(
+            NULLIF(frame->>'generated_url', ''),
+            NULLIF(frame->>'url', ''),
+            NULLIF(frame->>'image_url', ''),
+            NULLIF(frame->>'final_image_url', '')
+          ) IS NOT NULL
+          LIMIT 1
+        ) first_frame ON TRUE
+        WHERE vg.owner_id = $1
+          AND COALESCE(vg.script->>'video_url', '') <> ''
+
+        UNION ALL
+
+        SELECT
+          CONCAT(vg.id::text, '-frame-', vf.frame_index::text) AS id,
+          COALESCE(vg.product_id::text, CONCAT('video-', vg.id::text)) AS product_id,
+          'keyframe'::text AS image_type,
+          CONCAT('frame ', vf.frame_index::text) AS angle,
+          vg.video_type AS platform,
+          vf.frame_url AS image_url,
+          NULL::text AS upscaled_url,
+          vf.frame_url AS final_image_url,
+          vg.id::text AS task_id,
+          'video'::text AS task_kind,
+          vg.created_at,
+          COALESCE(vg.script->>'product_name', vg.script->>'brand_name', 'Video Generation') AS product_name,
+          COALESCE(vg.script->>'product_category', 'video') AS product_category,
+          NULL::text AS product_original_image,
+          'image'::text AS media_type,
+          NULL::text AS video_url,
+          vf.frame_url AS thumbnail_url,
+          (vg.product_id IS NOT NULL) AS listing_supported
+        FROM video_generations vg
+        JOIN LATERAL (
+          SELECT
+            frame_item.ordinality::int AS frame_index,
+            COALESCE(
+              NULLIF(frame_item.frame->>'generated_url', ''),
+              NULLIF(frame_item.frame->>'url', ''),
+              NULLIF(frame_item.frame->>'image_url', ''),
+              NULLIF(frame_item.frame->>'final_image_url', '')
+            ) AS frame_url
+          FROM jsonb_array_elements(COALESCE(vg.frames, '[]'::jsonb)) WITH ORDINALITY AS frame_item(frame, ordinality)
+        ) vf ON vf.frame_url IS NOT NULL
+        WHERE vg.owner_id = $1
+          AND COALESCE(vg.script->>'video_url', '') <> ''
+      ) gallery
+      ORDER BY created_at DESC
     `, [req.user.id]);
 
     res.json(rows);

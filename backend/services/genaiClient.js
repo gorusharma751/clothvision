@@ -58,7 +58,7 @@ const toLegacyResponse = (response) => {
   };
 };
 
-const resolveVertexModelPath = (modelName, project, location) => {
+export const resolveVertexModelPath = (modelName, project, location) => {
   const name = String(modelName || '').trim();
   if (!name) return name;
   if (name.includes('/')) return name;
@@ -80,6 +80,7 @@ const wrapModel = (client, modelName, context = {}) => ({
 
 export const getTextModelName = () => envVal('GEMINI_TEXT_MODEL', 'gemini-2.5-flash-lite');
 export const getImageModelName = () => envVal('GEMINI_IMAGE_MODEL', 'gemini-2.5-flash-image');
+export const getVideoModelName = () => envVal('GEMINI_VIDEO_MODEL', 'veo-2.0-generate-001');
 export const getVertexLocation = (overrides = {}) => {
   const locationRaw = String(overrides.location ?? envVal('GOOGLE_CLOUD_LOCATION', 'us-central1')).trim().toLowerCase();
   if (!locationRaw || isPlaceholderValue(locationRaw)) return 'us-central1';
@@ -119,8 +120,22 @@ export const getClient = (overrides = {}) => {
 
   const client = new GoogleGenAI(options);
 
+  const generateVideos = async (params = {}) => {
+    const resolvedModel = resolveVertexModelPath(params?.model, project, location);
+    return await client.models.generateVideos({
+      ...params,
+      model: resolvedModel
+    });
+  };
+
+  const getVideosOperation = async (operation) => {
+    return await client.operations.getVideosOperation({ operation });
+  };
+
   return {
     provider: 'vertex',
-    getGenerativeModel: ({ model }) => wrapModel(client, model, { project, location })
+    getGenerativeModel: ({ model }) => wrapModel(client, model, { project, location }),
+    generateVideos,
+    getVideosOperation
   };
 };

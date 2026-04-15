@@ -149,6 +149,7 @@ const inDateRange = (createdAt, filter) => {
 
 const toTextLines = (value) => (Array.isArray(value) ? value.join('\n') : String(value || ''));
 const toCommaText = (value) => (Array.isArray(value) ? value.join(', ') : String(value || ''));
+const isVideoItem = (item) => String(item?.media_type || item?.image_type || '').toLowerCase() === 'video';
 
 export default function OwnerGeneratedGallery() {
   const [items, setItems] = useState([]);
@@ -204,11 +205,13 @@ export default function OwnerGeneratedGallery() {
           product_name: item.product_name,
           product_category: item.product_category,
           created_at: item.created_at,
+          listing_supported: Boolean(item.listing_supported),
           images: [item]
         });
       } else {
         const task = taskMap.get(groupId);
         task.images.push(item);
+        task.listing_supported = task.listing_supported || Boolean(item.listing_supported);
         if (new Date(item.created_at).getTime() > new Date(task.created_at).getTime()) {
           task.created_at = item.created_at;
         }
@@ -357,8 +360,17 @@ export default function OwnerGeneratedGallery() {
   };
 
   const getImagePath = (item) => {
+    if (isVideoItem(item)) {
+      return item.thumbnail_url || item.final_image_url || item.image_url || null;
+    }
+
     if (imageState[item.id] === 'fallback') return item.image_url;
     return item.final_image_url || item.image_url;
+  };
+
+  const getVideoPath = (item) => {
+    if (!isVideoItem(item)) return null;
+    return item.video_url || item.final_image_url || item.image_url || null;
   };
 
   const onImageError = (item) => {
@@ -380,8 +392,10 @@ export default function OwnerGeneratedGallery() {
 
   const openTask = (task) => {
     setActiveTaskId(task.id);
-    const platform = taskPlatform[task.id] || 'amazon';
-    ensureListingLoaded(task, platform);
+    if (task.listing_supported) {
+      const platform = taskPlatform[task.id] || 'amazon';
+      ensureListingLoaded(task, platform);
+    }
   };
 
   const closeTaskModal = () => {
@@ -395,6 +409,23 @@ export default function OwnerGeneratedGallery() {
     a.href = href;
     a.download = 'clothvision-output.jpg';
     a.click();
+  };
+
+  const downloadVideo = (storedPath) => {
+    const href = buildUploadUrl(storedPath);
+    if (!href) return;
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = 'clothvision-output.mp4';
+    a.click();
+  };
+
+  const downloadMedia = (item) => {
+    if (isVideoItem(item)) {
+      downloadVideo(getVideoPath(item));
+      return;
+    }
+    downloadImage(getImagePath(item));
   };
 
   const resetFilters = () => {
@@ -467,11 +498,17 @@ export default function OwnerGeneratedGallery() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 12 }}>
                 {groupedTasks.map((task) => {
                   const previewImages = task.images.slice(0, 3);
+                  const hasVideo = task.images.some((item) => isVideoItem(item));
 
                   return (
                     <div key={task.id} style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 14, overflow: 'hidden' }}>
                       <div style={{ padding: 12 }}>
                         <div style={{ marginBottom: 10, position: 'relative', aspectRatio: '4/3', borderRadius: 12, border: '1px solid rgba(124,58,237,.15)', background: 'radial-gradient(circle at 25% 10%, rgba(124,58,237,.2), rgba(11,11,17,.9) 60%)', overflow: 'hidden' }}>
+                          {hasVideo && (
+                            <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5, padding: '3px 8px', borderRadius: 999, border: '1px solid rgba(239,68,68,.4)', background: 'rgba(239,68,68,.14)', color: '#f87171', fontSize: 10, fontWeight: 700, letterSpacing: '.04em' }}>
+                              VIDEO
+                            </div>
+                          )}
                           {previewImages.length > 0 ? (
                             previewImages.map((item, index) => {
                               const layer = deckOffsets[index] || deckOffsets[deckOffsets.length - 1];
@@ -549,7 +586,7 @@ export default function OwnerGeneratedGallery() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid rgba(124,58,237,.18)' }}>
                         <div>
                           <p style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{activeTask.product_name || 'Untitled Product'}</p>
-                          <p style={{ color: 'rgba(162,140,250,.52)', fontSize: 12 }}>{activeTask.images.length} output image{activeTask.images.length === 1 ? '' : 's'} · {activeTask.created_at ? new Date(activeTask.created_at).toLocaleString() : ''}</p>
+                          <p style={{ color: 'rgba(162,140,250,.52)', fontSize: 12 }}>{activeTask.images.length} output{activeTask.images.length === 1 ? '' : 's'} · {activeTask.created_at ? new Date(activeTask.created_at).toLocaleString() : ''}</p>
                         </div>
                         <button
                           onClick={closeTaskModal}
@@ -561,61 +598,73 @@ export default function OwnerGeneratedGallery() {
                       </div>
 
                       <div style={{ padding: 16, display: 'grid', gap: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            {LISTING_PLATFORMS.map((p) => (
+                        {activeTask.listing_supported && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              {LISTING_PLATFORMS.map((p) => (
+                                <button
+                                  key={p}
+                                  onClick={() => {
+                                    setTaskPlatform((prev) => ({ ...prev, [activeTask.id]: p }));
+                                    ensureListingLoaded(activeTask, p);
+                                  }}
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: 8,
+                                    border: `1px solid ${platform === p ? 'rgba(124,58,237,.6)' : 'rgba(124,58,237,.2)'}`,
+                                    background: platform === p ? 'rgba(124,58,237,.2)' : 'transparent',
+                                    color: platform === p ? '#c4b5fd' : 'rgba(162,140,250,.5)',
+                                    fontSize: 11,
+                                    cursor: 'pointer',
+                                    textTransform: 'capitalize'
+                                  }}
+                                >
+                                  {p}
+                                </button>
+                              ))}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <button
-                                key={p}
-                                onClick={() => {
-                                  setTaskPlatform((prev) => ({ ...prev, [activeTask.id]: p }));
-                                  ensureListingLoaded(activeTask, p);
-                                }}
-                                style={{
-                                  padding: '5px 10px',
-                                  borderRadius: 8,
-                                  border: `1px solid ${platform === p ? 'rgba(124,58,237,.6)' : 'rgba(124,58,237,.2)'}`,
-                                  background: platform === p ? 'rgba(124,58,237,.2)' : 'transparent',
-                                  color: platform === p ? '#c4b5fd' : 'rgba(162,140,250,.5)',
-                                  fontSize: 11,
-                                  cursor: 'pointer',
-                                  textTransform: 'capitalize'
-                                }}
+                                onClick={() => handleGenerateListing(activeTask)}
+                                style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(124,58,237,.4)', background: 'rgba(124,58,237,.16)', color: '#a78bfa', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
                               >
-                                {p}
+                                {listing.generating ? 'Generating...' : (listing.content ? 'Regenerate Content' : 'Generate Content')}
                               </button>
-                            ))}
+
+                              <button
+                                onClick={() => handleStartEdit(activeTask)}
+                                style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid rgba(240,180,41,.35)', background: 'rgba(240,180,41,.12)', color: '#f0b429', cursor: 'pointer' }}
+                                title="Edit content"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                            </div>
                           </div>
+                        )}
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <button
-                              onClick={() => handleGenerateListing(activeTask)}
-                              style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(124,58,237,.4)', background: 'rgba(124,58,237,.16)', color: '#a78bfa', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}
-                            >
-                              {listing.generating ? 'Generating...' : (listing.content ? 'Regenerate Content' : 'Generate Content')}
-                            </button>
-
-                            <button
-                              onClick={() => handleStartEdit(activeTask)}
-                              style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid rgba(240,180,41,.35)', background: 'rgba(240,180,41,.12)', color: '#f0b429', cursor: 'pointer' }}
-                              title="Edit content"
-                            >
-                              <Pencil size={12} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: activeTask.listing_supported ? 'repeat(auto-fit,minmax(280px,1fr))' : '1fr', gap: 12 }}>
                           <div style={{ border: '1px solid rgba(124,58,237,.15)', borderRadius: 12, background: 'rgba(10,10,16,.58)', padding: 12 }}>
                             <p style={{ marginBottom: 10, color: 'rgba(162,140,250,.55)', fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase' }}>Outputs</p>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10 }}>
                               {activeTask.images.map((item) => {
                                 const imagePath = getImagePath(item);
+                                const videoPath = getVideoPath(item);
+                                const isVideo = isVideoItem(item);
                                 const imageType = prettyValue(item.image_type) || 'generated';
                                 const angle = prettyValue(item.angle);
                                 return (
                                   <div key={item.id} style={{ background: 'rgba(124,58,237,.04)', border: '1px solid rgba(124,58,237,.12)', borderRadius: 11, overflow: 'hidden' }}>
                                     <div style={{ position: 'relative', aspectRatio: '1/1', background: 'rgba(124,58,237,.05)', overflow: 'hidden' }}>
-                                      {imagePath && imageState[item.id] !== 'failed' ? (
+                                      {isVideo && videoPath ? (
+                                        <video
+                                          controls
+                                          playsInline
+                                          preload="metadata"
+                                          src={buildUploadUrl(videoPath)}
+                                          style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#111' }}
+                                        />
+                                      ) : imagePath && imageState[item.id] !== 'failed' ? (
                                         <img
                                           src={buildUploadUrl(imagePath)}
                                           alt={item.product_name || 'Generated output'}
@@ -630,10 +679,10 @@ export default function OwnerGeneratedGallery() {
                                       )}
                                     </div>
                                     <div style={{ padding: '8px 10px' }}>
-                                      <p style={{ fontSize: 11, color: 'rgba(162,140,250,.65)', textTransform: 'capitalize' }}>{imageType}{angle ? ` · ${angle}` : ''}</p>
+                                      <p style={{ fontSize: 11, color: 'rgba(162,140,250,.65)', textTransform: 'capitalize' }}>{isVideo ? 'video' : imageType}{angle ? ` · ${angle}` : ''}</p>
                                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                                         <button
-                                          onClick={() => downloadImage(imagePath)}
+                                          onClick={() => downloadMedia(item)}
                                           style={{ padding: '5px 7px', borderRadius: 8, background: 'rgba(16,185,129,.08)', border: 'none', cursor: 'pointer', color: 'rgba(52,211,153,.8)' }}
                                         >
                                           <Download size={12} />
@@ -646,7 +695,8 @@ export default function OwnerGeneratedGallery() {
                             </div>
                           </div>
 
-                          <div style={{ border: '1px solid rgba(124,58,237,.15)', borderRadius: 12, background: 'rgba(10,10,16,.58)', padding: 12 }}>
+                          {activeTask.listing_supported && (
+                            <div style={{ border: '1px solid rgba(124,58,237,.15)', borderRadius: 12, background: 'rgba(10,10,16,.58)', padding: 12 }}>
                             <p style={{ marginBottom: 10, color: 'rgba(162,140,250,.55)', fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase' }}>Listing Content</p>
 
                             {listing.loading ? (
@@ -710,7 +760,8 @@ export default function OwnerGeneratedGallery() {
                             )}
 
                             {listing.error && <p style={{ marginTop: 8, color: 'rgba(248,113,113,.8)', fontSize: 11 }}>{listing.error}</p>}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -6,8 +6,13 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../database.js';
 import { authenticate } from '../middleware/auth.js';
-import { uploadToCloudinary, uploadFileToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
-import { getClient, getImageModelName, getTextModelName } from '../services/genaiClient.js';
+import {
+  uploadToCloudinary,
+  uploadFileToCloudinary,
+  uploadVideoToCloudinary,
+  isCloudinaryEnabled
+} from '../services/cloudinaryService.js';
+import { getClient, getImageModelName, getTextModelName, getVideoModelName } from '../services/genaiClient.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -65,16 +70,99 @@ const saveUploadedImage = async (filePath, userId, folder) => {
   return filePath;
 };
 
+const saveGeneratedVideo = async (buffer, userId, fileName, folder) => {
+  if (isCloudinaryEnabled()) {
+    try {
+      const cloudUrl = await uploadVideoToCloudinary(buffer, { folder: `clothvision/${userId}/${folder}` });
+      if (cloudUrl) return cloudUrl;
+    } catch (err) {
+      console.error('Cloudinary video upload failed:', err.message);
+    }
+  }
+  const outPath = path.join(ensureDir(userId), fileName).replace(/\\/g, '/');
+  fs.writeFileSync(outPath, buffer);
+  return outPath;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getVideoAspectRatio = (platform) => {
+  const verticalPlatforms = new Set(['instagram_reel', 'youtube_short', 'facebook_reel', 'tiktok']);
+  return verticalPlatforms.has(platform) ? '9:16' : '16:9';
+};
+
+const normalizeVideoDurationSec = (duration) => {
+  const parsed = Number(duration);
+  if (!Number.isFinite(parsed)) return 8;
+  // Veo generations are short-form clips; cap to safe range.
+  return Math.max(5, Math.min(8, Math.round(parsed)));
+};
+
+const buildAiVideoPrompt = ({ script, brandName, productName, tone, objective, callToAction, platform }) => {
+  const scenes = Array.isArray(script?.storyboard) ? script.storyboard : [];
+  const storyboardText = scenes
+    .map((scene, idx) => {
+      return `${idx + 1}. ${scene.scene} | Visual: ${scene.visual} | Overlay: ${scene.text_overlay} | Voice: ${scene.voiceover}`;
+    })
+    .join('\n');
+
+  return `Create a premium short-form product advertisement video.
+
+Platform: ${platform}
+Brand: ${brandName || 'Brand'}
+Product: ${productName || 'Product'}
+Tone: ${tone}
+Objective: ${objective}
+Primary call-to-action: ${callToAction}
+
+Hook: ${script?.hook || ''}
+Caption direction: ${script?.caption || ''}
+Storyboard:
+${storyboardText || '1. Hero product shot with smooth camera move.'}
+
+Hard requirements:
+1. Keep product shape, texture, and colors consistent with the source image.
+2. Cinematic movement (push-in, parallax, subtle orbit), no slideshow effect.
+3. Clean ad-ready look with professional lighting.
+4. No watermarks, no text artifacts.
+5. Produce a complete coherent motion clip, not still frames.`;
+};
+
+const extractOperationErrorMessage = (errorObject) => {
+  if (!errorObject || typeof errorObject !== 'object') return '';
+  const primary = String(errorObject.message || '').trim();
+  if (primary) return primary;
+
+  const nested = Array.isArray(errorObject.details)
+    ? errorObject.details
+        .map((item) => String(item?.message || item || '').trim())
+        .filter(Boolean)
+        .join('; ')
+    : '';
+  if (nested) return nested;
+
+  return String(errorObject.error?.message || '').trim();
+};
+
 const ensureCreditsAvailable = async (userId, amount) => {
   const { rows } = await query('SELECT balance FROM credits WHERE owner_id=$1', [userId]);
   if (!rows.length || Number(rows[0].balance) < amount) throw new Error('Insufficient credits');
 };
 
 const useCredits = async (userId, amount) => {
-  await query(
-    'UPDATE credits SET balance=balance-$1, total_used=total_used+$1, updated_at=NOW() WHERE owner_id=$2',
+  const { rows, rowCount } = await query(
+    `UPDATE credits
+     SET balance = balance - $1,
+         total_used = total_used + $1,
+         updated_at = NOW()
+     WHERE owner_id = $2
+       AND balance >= $1
+     RETURNING balance`,
     [amount, userId]
   );
+
+  if (!rowCount) throw new Error('Insufficient credits');
+  return Number(rows[0]?.balance || 0);
 };
 
 const getPlanCreditsPerImage = async (userId) => {
@@ -110,6 +198,7 @@ const extractGeneratedImage = (result) => {
 const getErrorStatusCode = (err) => {
   if (err?.message === 'Insufficient credits') return 402;
   const raw = String(err?.message || '').toLowerCase();
+  if (raw.includes('timed out')) return 504;
   if (raw.includes('quota') || raw.includes('429') || raw.includes('resource exhausted')) return 503;
   if (raw.includes('api key') || raw.includes('permission denied') || raw.includes('forbidden')) return 502;
   return 500;
@@ -212,11 +301,16 @@ router.post('/video', upload.single('product_image'), async (req, res) => {
     const objective = String(req.body.objective || 'sales').trim();
     const callToAction = String(req.body.cta || 'Shop now').trim();
 
-    const textModel = getClient().getGenerativeModel({ model: getTextModelName() });
+    const genAI = getClient();
+    const sourceImageBase64 = toBase64(req.file.path);
+    const sourceImageMime = getMimeType(req.file.path);
+
+    const textModel = genAI.getGenerativeModel({ model: getTextModelName() });
     const fallbackScript = {
       hook: `Turn one ${productName || 'product'} photo into a high-converting short video.` ,
       caption: `${brandName || 'Brand'} ${productName || 'product'} now available. ${callToAction}`,
       hashtags: ['#ecommerce', '#productvideo', '#aicontent'],
+      motion_prompt: `Cinematic vertical ad video for ${productName || 'product'} with smooth camera moves and premium lighting.`,
       storyboard: [
         {
           scene: 'Hook shot',
@@ -257,6 +351,7 @@ Return ONLY valid JSON with this exact schema:
   "hook": "string",
   "caption": "string",
   "hashtags": ["#tag1", "#tag2", "#tag3"],
+  "motion_prompt": "single complete prompt for AI video generation",
   "storyboard": [
     {
       "scene": "short title",
@@ -282,6 +377,7 @@ Rules:
     if (!Array.isArray(script.hashtags) || !script.hashtags.length) {
       script.hashtags = fallbackScript.hashtags;
     }
+    script.motion_prompt = String(script.motion_prompt || fallbackScript.motion_prompt || '').trim();
 
     script.storyboard = script.storyboard.slice(0, 5).map((scene, idx) => ({
       scene: String(scene.scene || `Scene ${idx + 1}`),
@@ -291,7 +387,7 @@ Rules:
       duration_sec: Number(scene.duration_sec || 3)
     }));
 
-    const imageModel = getClient().getGenerativeModel({ model: getImageModelName() });
+    const imageModel = genAI.getGenerativeModel({ model: getImageModelName() });
     const frameTargets = script.storyboard.slice(0, 3);
     const frameResults = [];
 
@@ -315,8 +411,8 @@ Requirements:
         const frameContent = [
           {
             inlineData: {
-              data: toBase64(req.file.path),
-              mimeType: getMimeType(req.file.path)
+              data: sourceImageBase64,
+              mimeType: sourceImageMime
             }
           },
           { text: framePrompt }
@@ -339,10 +435,69 @@ Requirements:
       }
     }
 
-    await useCredits(req.user.id, creditsNeeded);
+    const videoModel = getVideoModelName();
+    const aiDurationSec = normalizeVideoDurationSec(duration);
+    const aiVideoPrompt = script.motion_prompt || buildAiVideoPrompt({
+      script,
+      brandName,
+      productName,
+      tone,
+      objective,
+      callToAction,
+      platform
+    });
+
+    let operation = await genAI.generateVideos({
+      model: videoModel,
+      source: {
+        prompt: aiVideoPrompt,
+        image: {
+          imageBytes: sourceImageBase64,
+          mimeType: sourceImageMime
+        }
+      },
+      config: {
+        numberOfVideos: 1,
+        durationSeconds: aiDurationSec,
+        aspectRatio: getVideoAspectRatio(platform),
+        enhancePrompt: true,
+        generateAudio: false
+      }
+    });
+
+    const pollIntervalMs = Math.max(3000, Number(process.env.VIDEO_POLL_INTERVAL_MS || 10000));
+    const timeoutMs = Math.max(60000, Number(process.env.VIDEO_GENERATION_TIMEOUT_MS || 480000));
+    const startedAt = Date.now();
+
+    while (!operation?.done) {
+      if (Date.now() - startedAt > timeoutMs) {
+        throw new Error('AI video generation timed out. Please retry after a minute.');
+      }
+      await sleep(pollIntervalMs);
+      operation = await genAI.getVideosOperation(operation);
+    }
+
+    if (operation?.error) {
+      const operationMessage = extractOperationErrorMessage(operation.error);
+      throw new Error(operationMessage ? `AI video generation failed: ${operationMessage}` : 'AI video generation failed.');
+    }
+
+    const generatedVideo = operation?.response?.generatedVideos?.[0]?.video;
+    let videoUrl = String(generatedVideo?.uri || '').trim();
+
+    if (!videoUrl && generatedVideo?.videoBytes) {
+      const videoBuffer = Buffer.from(generatedVideo.videoBytes, 'base64');
+      videoUrl = await saveGeneratedVideo(videoBuffer, req.user.id, `video_${uuidv4()}.mp4`, 'videos');
+    }
+
+    if (!videoUrl) {
+      throw new Error('AI video generation returned no playable video. Verify model access and billing, then retry.');
+    }
+
+    const remainingCredits = await useCredits(req.user.id, creditsNeeded);
     await query(
       'INSERT INTO credit_transactions (owner_id,type,amount,description) VALUES ($1,$2,$3,$4)',
-      [req.user.id, 'use', creditsNeeded, `Video Studio: ${productName || brandName || 'Video script + frames'}`]
+      [req.user.id, 'use', creditsNeeded, `Video Studio: ${productName || brandName || 'AI video generation'}`]
     );
 
     await query(
@@ -350,13 +505,34 @@ Requirements:
       [
         req.user.id,
         platform,
-        JSON.stringify({ ...script, source: 'video_studio', tone, objective, cta: callToAction }),
+        JSON.stringify({
+          ...script,
+          source: 'video_studio',
+          tone,
+          objective,
+          cta: callToAction,
+          product_name: productName || null,
+          brand_name: brandName || null,
+          video_url: videoUrl,
+          video_model: videoModel,
+          ai_duration_sec: aiDurationSec,
+          operation_name: operation?.name || null
+        }),
         JSON.stringify(frameResults),
         creditsNeeded
       ]
     );
 
-    res.json({ success: true, script, frames: frameResults, credits_used: creditsNeeded });
+    res.json({
+      success: true,
+      script,
+      frames: frameResults,
+      video_url: videoUrl,
+      video_model: videoModel,
+      ai_duration_sec: aiDurationSec,
+      credits_used: creditsNeeded,
+      remaining_credits: remainingCredits
+    });
   } catch (err) {
     res.status(getErrorStatusCode(err)).json({ error: err.message || 'Video generation failed' });
   }
