@@ -62,6 +62,22 @@ function ImageBox({ file, preview, onFile, onRemove, label, sublabel }) {
   );
 }
 
+function CompactSteps({ current, steps }) {
+  return (
+    <div className="items-steps-wrap" style={{display:'grid',gridTemplateColumns:`repeat(${steps.length},minmax(0,1fr))`,gap:8,marginBottom:22}}>
+      {steps.map((s,i)=>(
+        <div key={s} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,minWidth:0}}>
+          <div style={{width:24,height:24,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,fontFamily:'Syne,sans-serif',background:i<current?'rgba(34,197,94,.2)':i===current?'rgba(240,180,41,.2)':'rgba(30,30,45,.5)',color:i<current?'#4ade80':i===current?'#f0b429':'rgba(162,140,250,.3)',border:`1px solid ${i<current?'rgba(34,197,94,.3)':i===current?'rgba(240,180,41,.4)':'rgba(124,58,237,.1)'}`}}>
+            {i<current?'✓':(i+1)}
+          </div>
+          <span style={{fontSize:11,fontWeight:i===current?600:500,color:i===current?'#f0b429':'rgba(162,140,250,.42)',lineHeight:1.2,textAlign:'center'}}>{s}</span>
+        </div>
+      ))}
+      <style>{`@media(max-width:520px){.items-steps-wrap span{font-size:10px!important}}`}</style>
+    </div>
+  );
+}
+
 export default function ItemsStudio() {
   const nav = useNavigate();
   const [step, setStep] = useState(0);
@@ -133,27 +149,14 @@ export default function ItemsStudio() {
       subtitle="Watch, Perfume, Cap, Bag and more"
       contentPadding={0}
       actions={
-        <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} className="btn btn-outline" style={{padding:'8px 12px'}}>
-          <ArrowLeft size={14}/>{step===0 ? 'Back to Studio' : 'Back Step'}
+        <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} className="btn btn-outline" style={{padding:'6px 10px',fontSize:12,borderRadius:8}}>
+          <ArrowLeft size={13}/>{step===0 ? 'Studio' : 'Back'}
         </button>
       }
     >
       <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
-        <div style={{maxWidth:860,margin:'0 auto',padding:'24px 16px'}}>
-        {/* Steps */}
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:28,flexWrap:'wrap'}}>
-          {STEPS.map((s,i)=>(
-            <React.Fragment key={i}>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <div style={{width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,fontFamily:'Syne,sans-serif',background:i<step?'rgba(34,197,94,.2)':i===step?'rgba(240,180,41,.2)':'rgba(30,30,45,.5)',color:i<step?'#4ade80':i===step?'#f0b429':'rgba(162,140,250,.3)',border:`1px solid ${i<step?'rgba(34,197,94,.3)':i===step?'rgba(240,180,41,.4)':'rgba(124,58,237,.1)'}`}}>
-                  {i<step?'✓':(i+1)}
-                </div>
-                <span style={{fontSize:12,fontWeight:i===step?600:400,color:i===step?'#f0b429':'rgba(162,140,250,.35)'}}>{s}</span>
-              </div>
-              {i<STEPS.length-1&&<div style={{flex:1,height:1,background:'rgba(240,180,41,.08)',minWidth:16}}/>}
-            </React.Fragment>
-          ))}
-        </div>
+        <div style={{maxWidth:860,margin:'0 auto',padding:'clamp(14px,2.6vw,24px) 16px'}}>
+        <CompactSteps current={step} steps={STEPS}/>
 
         {step===0 && (
           <div className="animate-fade-up">
@@ -186,7 +189,7 @@ export default function ItemsStudio() {
           <div className="animate-fade-up">
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:20}}>
               <div>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,gap:8,flexWrap:'wrap'}}>
                   <p style={{fontSize:12,color:'rgba(240,180,41,.6)',fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>PRODUCT PHOTOS</p>
                   <button onClick={addItem} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:8,border:'1px solid rgba(240,180,41,.2)',background:'transparent',color:'#f0b429',fontSize:11,cursor:'pointer'}}><Plus size={11}/>Add</button>
                 </div>
@@ -270,7 +273,7 @@ export default function ItemsStudio() {
                   ))}
                 </div>
                 <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20}}>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,gap:8,flexWrap:'wrap'}}>
                     <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',fontSize:'.95rem'}}>📋 Listing Content</h3>
                     <div style={{display:'flex',gap:6,alignItems:'center'}}>
                       {['amazon','flipkart'].map(p=>(
@@ -302,7 +305,7 @@ export default function ItemsStudio() {
         )}
 
         {step<2 && (
-          <div style={{display:'flex',justifyContent:'space-between',marginTop:28,paddingTop:20,borderTop:'1px solid rgba(240,180,41,.08)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:28,paddingTop:20,borderTop:'1px solid rgba(240,180,41,.08)',gap:10,flexWrap:'wrap'}}>
             <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} className="btn-ghost"><ArrowLeft size={14}/>Back</button>
             {step<1 ? (
               <button onClick={()=>setStep(1)} disabled={!itemType} className="btn-gold">Next <ArrowRight size={14}/></button>

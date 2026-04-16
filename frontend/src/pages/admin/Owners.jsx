@@ -22,7 +22,7 @@ const OwnerFormFields = ({ data, setData, isEdit }) => {
         <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">PASSWORD *</label>
         <input className="input-field" value={data.password} onChange={e=>updateField('password', e.target.value)} required type="password" placeholder="Min 6 chars"/>
       </div></>}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="mobile-grid-2">
         <div>
           <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">OWNER NAME</label>
           <input className="input-field" value={data.name} onChange={e=>updateField('name', e.target.value)} placeholder="John Doe"/>
@@ -32,7 +32,7 @@ const OwnerFormFields = ({ data, setData, isEdit }) => {
           <input className="input-field" value={data.shop_name} onChange={e=>updateField('shop_name', e.target.value)} placeholder="My Fashion Store"/>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="mobile-grid-2">
         <div>
           <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">THEME</label>
           <select className="input-field" value={data.theme} onChange={e=>updateField('theme', e.target.value)}>
@@ -104,17 +104,60 @@ export default function AdminOwners() {
 
   return (
     <Layout title="Shop Owners" subtitle={`${owners.length} registered owners`}
-      actions={<button onClick={()=>setShowAdd(true)} className="btn-primary flex items-center gap-2"><Plus size={16}/>New Owner</button>}>
+      actions={<button onClick={()=>setShowAdd(true)} className="btn-primary flex items-center gap-2 whitespace-nowrap"><Plus size={16}/>New Owner</button>}>
 
       {/* Search */}
-      <div className="relative mb-6 max-w-sm">
+      <div className="relative mb-6 max-w-md">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-400/40"/>
         <input className="input-field pl-9" placeholder="Search owners..." value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
 
-      {/* Table */}
-      <div className="rounded-2xl overflow-hidden" style={{background:'#111118', border:'1px solid #1e1e2d'}}>
-        <table className="w-full">
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {filtered.map((o, i) => (
+          <motion.div key={o.id} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:i*0.04}}
+            className="rounded-2xl p-3.5" style={{background:'#111118', border:'1px solid #1e1e2d'}}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{background:'linear-gradient(135deg,#7c3aed,#f0b429)'}}>
+                  {(o.shop_name||'S')[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{o.shop_name||'–'}</p>
+                  <p className="text-xs text-purple-300/80 truncate">{o.name||'–'}</p>
+                </div>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full ${o.is_active ? 'text-green-400' : 'text-red-400'}`} style={{background:o.is_active?'rgba(34,197,94,0.08)':'rgba(239,68,68,0.08)'}}>
+                {o.is_active ? 'Active' : 'Suspended'}
+              </span>
+            </div>
+
+            <p className="mt-2 text-xs text-purple-400/55 break-all">{o.email}</p>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl px-2.5 py-2" style={{background:'rgba(124,58,237,0.07)', border:'1px solid rgba(124,58,237,0.12)'}}>
+                <p className="text-[10px] tracking-wide text-purple-400/50">PLAN</p>
+                <p className="text-xs text-purple-300 capitalize font-semibold">{o.plan}</p>
+              </div>
+              <div className="rounded-xl px-2.5 py-2" style={{background:'rgba(240,180,41,0.06)', border:'1px solid rgba(240,180,41,0.12)'}}>
+                <p className="text-[10px] tracking-wide text-purple-400/50">CREDITS</p>
+                <p className="text-xs text-gold-400 font-semibold">{o.credits} <span className="text-purple-400/40">/{o.credits_used} used</span></p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-end gap-1.5">
+              <button onClick={()=>setShowCredit(o)} className="p-1.5 rounded-lg text-gold-400 hover:bg-yellow-500/10 transition-colors" title="Add Credits"><CreditCard size={15}/></button>
+              <button onClick={()=>setEditOwner({...o})} className="p-1.5 rounded-lg text-purple-400 hover:bg-purple-500/10 transition-colors" title="Edit"><Edit2 size={15}/></button>
+              <button onClick={()=>handleDelete(o.id)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors" title="Delete"><Trash2 size={15}/></button>
+            </div>
+          </motion.div>
+        ))}
+        {filtered.length === 0 && <div className="text-center py-16 text-purple-400/40">No owners found</div>}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden sm:block rounded-2xl overflow-hidden responsive-table-wrap" style={{background:'#111118', border:'1px solid #1e1e2d'}}>
+        <table className="w-full responsive-table">
           <thead>
             <tr style={{borderBottom:'1px solid #1e1e2d'}}>
               {['Shop','Owner','Plan','Credits','Status','Actions'].map(h=>(
@@ -136,7 +179,7 @@ export default function AdminOwners() {
                 </td>
                 <td className="px-4 py-3">
                   <p className="text-sm text-white">{o.name||'–'}</p>
-                  <p className="text-xs text-purple-400/50">{o.email}</p>
+                  <p className="text-xs text-purple-400/50 break-all sm:break-normal">{o.email}</p>
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-xs px-2 py-1 rounded-full capitalize" style={{background:'rgba(124,58,237,0.1)',color:'#a78bfa'}}>{o.plan}</span>
@@ -166,7 +209,7 @@ export default function AdminOwners() {
       <Modal open={showAdd} onClose={()=>setShowAdd(false)} title="Create Shop Owner">
         <form onSubmit={handleAdd} className="space-y-4">
           <OwnerFormFields data={form} setData={setForm} isEdit={false}/>
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <button type="button" onClick={()=>setShowAdd(false)} className="flex-1 py-2 rounded-xl border text-purple-400 text-sm hover:bg-white/5" style={{borderColor:'rgba(124,58,237,0.2)'}}>Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 btn-primary">{loading ? 'Creating...' : 'Create Owner'}</button>
           </div>
@@ -183,7 +226,7 @@ export default function AdminOwners() {
               {editOwner.is_active ? <ToggleRight size={24} className="text-green-400"/> : <ToggleLeft size={24}/>}
             </button>
           </div>
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
             <button type="button" onClick={()=>setEditOwner(null)} className="flex-1 py-2 rounded-xl border text-purple-400 text-sm hover:bg-white/5" style={{borderColor:'rgba(124,58,237,0.2)'}}>Cancel</button>
             <button type="submit" disabled={loading} className="flex-1 btn-primary">{loading ? 'Saving...' : 'Save Changes'}</button>
           </div>
@@ -205,7 +248,7 @@ export default function AdminOwners() {
             <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">NOTE (optional)</label>
             <input className="input-field" value={creditDesc} onChange={e=>setCreditDesc(e.target.value)} placeholder="Reason for adding credits"/>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button onClick={()=>setShowCredit(null)} className="flex-1 py-2 rounded-xl border text-purple-400 text-sm hover:bg-white/5" style={{borderColor:'rgba(124,58,237,0.2)'}}>Cancel</button>
             <button onClick={handleAddCredit} className="flex-1 btn-gold">Add Credits</button>
           </div>

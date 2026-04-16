@@ -88,7 +88,7 @@ This repository is configured for deploying the **frontend on Vercel**.
 
 ### 1. Deploy backend first (production host)
 
-Deploy the `backend/` app to any Node host (Render/Railway/Fly/etc.) and set:
+Deploy the `backend/` app to Heroku (or any Node host) and set:
 
 - `DATABASE_URL`
 - `JWT_SECRET`
@@ -101,7 +101,7 @@ Deploy the `backend/` app to any Node host (Render/Railway/Fly/etc.) and set:
 #### Env behavior
 
 - Local development: backend reads `backend/.env`.
-- Live deployment: Railway environment variables should be set in Railway dashboard.
+- Live deployment: set environment variables in Heroku Dashboard -> Settings -> Config Vars.
 - `backend/.env` stays local because it is git-ignored.
 
 ### 2. Configure Vercel frontend env vars

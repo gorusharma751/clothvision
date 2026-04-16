@@ -495,7 +495,7 @@ export default function OwnerGeneratedGallery() {
             </div>
           ) : (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))', gap: 12 }}>
                 {groupedTasks.map((task) => {
                   const previewImages = task.images.slice(0, 3);
                   const hasVideo = task.images.some((item) => isVideoItem(item));
@@ -583,7 +583,7 @@ export default function OwnerGeneratedGallery() {
                       onClick={(e) => e.stopPropagation()}
                       style={{ width: 'min(1120px, 96vw)', maxHeight: '90vh', overflowY: 'auto', borderRadius: 16, border: '1px solid rgba(124,58,237,.3)', background: 'linear-gradient(180deg,rgba(14,14,21,.98),rgba(9,9,15,.98))', boxShadow: '0 24px 60px rgba(0,0,0,.55)' }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid rgba(124,58,237,.18)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid rgba(124,58,237,.18)', flexWrap: 'wrap' }}>
                         <div>
                           <p style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{activeTask.product_name || 'Untitled Product'}</p>
                           <p style={{ color: 'rgba(162,140,250,.52)', fontSize: 12 }}>{activeTask.images.length} output{activeTask.images.length === 1 ? '' : 's'} · {activeTask.created_at ? new Date(activeTask.created_at).toLocaleString() : ''}</p>
@@ -643,10 +643,10 @@ export default function OwnerGeneratedGallery() {
                           </div>
                         )}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: activeTask.listing_supported ? 'repeat(auto-fit,minmax(280px,1fr))' : '1fr', gap: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: activeTask.listing_supported ? 'repeat(auto-fit,minmax(240px,1fr))' : '1fr', gap: 12 }}>
                           <div style={{ border: '1px solid rgba(124,58,237,.15)', borderRadius: 12, background: 'rgba(10,10,16,.58)', padding: 12 }}>
                             <p style={{ marginBottom: 10, color: 'rgba(162,140,250,.55)', fontSize: 11, letterSpacing: '.05em', textTransform: 'uppercase' }}>Outputs</p>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10 }}>
                               {activeTask.images.map((item) => {
                                 const imagePath = getImagePath(item);
                                 const videoPath = getVideoPath(item);

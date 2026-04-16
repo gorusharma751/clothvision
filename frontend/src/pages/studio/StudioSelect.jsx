@@ -16,26 +16,26 @@ export default function StudioSelect() {
   const nav = useNavigate();
   return (
     <Layout title="AI Studio" subtitle="Choose your studio type" contentPadding={0}>
-      <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,position:'relative',overflow:'hidden'}}>
-        <div className="animate-orb" style={{position:'absolute',top:'10%',left:'5%',width:400,height:400,borderRadius:'50%',background:'radial-gradient(circle,rgba(124,58,237,.12),transparent)',pointerEvents:'none'}}/>
-        <div className="animate-orb2" style={{position:'absolute',bottom:'10%',right:'5%',width:300,height:300,borderRadius:'50%',background:'radial-gradient(circle,rgba(240,180,41,.08),transparent)',pointerEvents:'none'}}/>
-        <div style={{textAlign:'center',marginBottom:40,position:'relative'}}>
+      <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'clamp(12px,2.8vw,24px)',position:'relative',overflow:'hidden'}}>
+        <div className="animate-orb" style={{position:'absolute',top:'10%',left:'5%',width:340,height:340,borderRadius:'50%',background:'radial-gradient(circle,rgba(124,58,237,.12),transparent)',pointerEvents:'none'}}/>
+        <div className="animate-orb2" style={{position:'absolute',bottom:'10%',right:'5%',width:260,height:260,borderRadius:'50%',background:'radial-gradient(circle,rgba(240,180,41,.08),transparent)',pointerEvents:'none'}}/>
+        <div style={{textAlign:'center',marginBottom:'clamp(18px,4vw,40px)',position:'relative'}}>
           <p style={{fontSize:'.7rem',letterSpacing:'.16em',color:'rgba(162,140,250,.45)',fontFamily:'Syne,sans-serif',marginBottom:10}}>AI STUDIO</p>
           <h1 style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:'clamp(1.8rem,5vw,3rem)',color:'#fff',lineHeight:1.1,marginBottom:10}}>
             What are you <span className="shimmer-text">creating</span> today?
           </h1>
           <p style={{color:'rgba(162,140,250,.38)',fontSize:'.9rem'}}>Choose your studio type to get started</p>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:14,width:'100%',maxWidth:1000,position:'relative'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(145px,1fr))',gap:12,width:'100%',maxWidth:1000,position:'relative'}}>
           {CARDS.map((c,i)=>(
             <div key={c.id} onClick={()=>nav(c.route)}
-              style={{background:'#111118',border:`2px solid ${c.border}`,borderRadius:18,padding:'1.6rem 1.3rem',textAlign:'center',cursor:'pointer',transition:'all .3s',animationDelay:`${i*.05}s`,position:'relative'}}
+              style={{background:'#111118',border:`2px solid ${c.border}`,borderRadius:16,padding:'clamp(.9rem,2.4vw,1.3rem) .8rem',textAlign:'center',cursor:'pointer',transition:'all .3s',animationDelay:`${i*.05}s`,position:'relative'}}
               className="animate-fade-up"
               onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-5px)';e.currentTarget.style.boxShadow=`0 18px 45px ${c.color}20`;}}
               onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
-              <div style={{fontSize:40,marginBottom:12}}>{c.icon}</div>
-              <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1rem',color:'#fff',marginBottom:5}}>{c.label}</h2>
-              <p style={{fontSize:'.8rem',color:'rgba(162,140,250,.45)',lineHeight:1.5}}>{c.desc}</p>
+              <div style={{fontSize:30,marginBottom:8}}>{c.icon}</div>
+              <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'.9rem',color:'#fff',marginBottom:4,lineHeight:1.25}}>{c.label}</h2>
+              <p style={{fontSize:'.72rem',color:'rgba(162,140,250,.45)',lineHeight:1.4}}>{c.desc}</p>
             </div>
           ))}
         </div>

@@ -136,7 +136,7 @@ export default function PromptSettings() {
 
   return (
     <Layout title="Prompt Settings" subtitle="Customize AI generation prompts for all users">
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(340px,1fr))',gap:20,maxWidth:1200}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:20,maxWidth:1200}}>
 
         {/* Left: Prompt customization */}
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -174,7 +174,7 @@ export default function PromptSettings() {
             </div>
           ))}
 
-          <button onClick={save} disabled={saving} className="btn-primary" style={{alignSelf:'flex-start',padding:'10px 24px'}}>
+          <button onClick={save} disabled={saving} className="btn-primary" style={{alignSelf:'flex-start',padding:'10px 24px',width:'100%',maxWidth:320}}>
             <Save size={14}/>{saving?'Saving...':'Save All Prompts'}
           </button>
         </div>
@@ -192,7 +192,7 @@ export default function PromptSettings() {
               <DropBox preview={productPreview} onFile={f=>{setProductFile(f);setProductPreview(URL.createObjectURL(f));}} onRemove={()=>{setProductFile(null);setProductPreview(null);}} label="Upload product photo"/>
             </div>
 
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:14}}>
               {[['name','Product Name','e.g. Polo T-Shirt'],['category','Category','e.g. T-Shirt'],['color','Color','e.g. Navy Blue'],['description','Details','e.g. Striped pattern']].map(([k,l,ph])=>(
                 <div key={k}>
                   <label style={{fontSize:10,color:'rgba(124,58,237,.4)',display:'block',marginBottom:4,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>{l.toUpperCase()}</label>
@@ -251,8 +251,8 @@ export default function PromptSettings() {
                 <div>
                   <p style={{fontSize:10,color:'rgba(162,140,250,.4)',marginBottom:6,fontFamily:'Syne,sans-serif',letterSpacing:'.08em'}}>PLATFORM TIPS</p>
                   {Object.entries(generatedPrompt.platform_specific).map(([platform,tip])=>(
-                    <div key={platform} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:5}}>
-                      <span style={{fontSize:11,fontWeight:600,color:'#f0b429',minWidth:70,textTransform:'capitalize'}}>{platform}:</span>
+                    <div key={platform} style={{display:'flex',gap:8,alignItems:'flex-start',marginBottom:5,flexWrap:'wrap'}}>
+                      <span style={{fontSize:11,fontWeight:600,color:'#f0b429',minWidth:56,textTransform:'capitalize'}}>{platform}:</span>
                       <span style={{fontSize:11,color:'rgba(162,140,250,.55)'}}>{tip}</span>
                     </div>
                   ))}

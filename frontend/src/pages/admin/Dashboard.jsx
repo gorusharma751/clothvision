@@ -19,10 +19,10 @@ export default function AdminDashboard() {
 
   return (
     <Layout title="Admin Dashboard" subtitle="ClothVision Control Center"
-      actions={<Link to="/admin/owners" className="btn-primary flex items-center gap-2"><Plus size={16}/>Add Owner</Link>}>
+      actions={<Link to="/admin/owners" className="btn-primary flex items-center gap-2 whitespace-nowrap"><Plus size={16}/>Add Owner</Link>}>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         <StatCard icon={Users} label="Shop Owners" value={stats?.total_owners ?? '–'} color="purple" index={0} />
         <StatCard icon={Package} label="Total Products" value={stats?.total_products ?? '–'} color="gold" index={1} />
         <StatCard icon={Image} label="Images Generated" value={stats?.total_images ?? '–'} color="green" index={2} />
@@ -42,12 +42,12 @@ export default function AdminDashboard() {
           ) : (
             <div className="space-y-2">
               {requests.map(r => (
-                <div key={r.id} className="flex items-center justify-between p-3 rounded-xl" style={{background:'rgba(124,58,237,0.05)', border:'1px solid rgba(124,58,237,0.1)'}}>
+                <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl gap-2" style={{background:'rgba(124,58,237,0.05)', border:'1px solid rgba(124,58,237,0.1)'}}>
                   <div>
                     <p className="text-sm font-semibold text-white">{r.shop_name || r.name}</p>
                     <p className="text-xs text-purple-400/60">{r.message?.slice(0,40) || 'No message'}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <p className="text-sm font-bold text-gold-400">+{r.amount_requested}</p>
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{background:'rgba(251,191,36,0.1)',color:'#f0b429'}}>pending</span>
                   </div>

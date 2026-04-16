@@ -89,7 +89,7 @@ export default function OwnerProducts() {
       ) : (
         <>
           <div style={{marginBottom:14,padding:12,border:'1px solid rgba(124,58,237,.18)',background:'rgba(17,17,24,.92)',borderRadius:12}}>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr auto',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
               <input
                 value={searchFilter}
                 onChange={e=>setSearchFilter(e.target.value)}
@@ -114,7 +114,7 @@ export default function OwnerProducts() {
                 {DATE_FILTERS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
               </select>
 
-              <button onClick={resetFilters} style={{padding:'0 12px',borderRadius:8,border:'1px solid rgba(16,185,129,.35)',background:'rgba(16,185,129,.14)',color:'#6ee7b7',fontSize:11,fontWeight:700,cursor:'pointer'}}>Reset</button>
+              <button onClick={resetFilters} style={{padding:'9px 12px',borderRadius:8,border:'1px solid rgba(16,185,129,.35)',background:'rgba(16,185,129,.14)',color:'#6ee7b7',fontSize:11,fontWeight:700,cursor:'pointer'}}>Reset</button>
             </div>
           </div>
 
@@ -126,7 +126,7 @@ export default function OwnerProducts() {
               </button>
             </div>
           ) : (
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:14}}>
           {filteredProducts.map(p=>{
             const cardImage = p.original_image;
             const hasGenerated = Number(p.image_count || 0) > 0;
@@ -162,14 +162,14 @@ export default function OwnerProducts() {
                 <p style={{fontWeight:600,color:'#fff',fontSize:13,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</p>
                 <p style={{fontSize:11,color:'rgba(162,140,250,.4)',marginBottom:10}}>{p.category}{p.color?` · ${p.color}`:''}</p>
                 <p style={{fontSize:10,color:'rgba(162,140,250,.55)',marginBottom:10}}>{hasGenerated ? `${p.image_count} output image${Number(p.image_count) === 1 ? '' : 's'} in gallery` : status === 'failed' ? 'Last generation failed' : 'No output images yet'}</p>
-                <div style={{display:'flex',gap:6}}>
-                  <Link to="/owner/studio" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px',borderRadius:8,background:'rgba(124,58,237,.1)',color:'#a78bfa',fontSize:11,fontWeight:600,textDecoration:'none'}}>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <Link to="/owner/studio" style={{flex:'1 1 80px',display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px',borderRadius:8,background:'rgba(124,58,237,.1)',color:'#a78bfa',fontSize:11,fontWeight:600,textDecoration:'none'}}>
                     <Wand2 size={11}/>Gen
                   </Link>
-                  <Link to="/owner/generated" style={{padding:'6px 8px',borderRadius:8,background:'rgba(16,185,129,.12)',border:'none',cursor:'pointer',color:'rgba(52,211,153,.8)',fontSize:11,fontWeight:700,textDecoration:'none'}}>
+                  <Link to="/owner/generated" style={{flex:'1 1 64px',display:'inline-flex',alignItems:'center',justifyContent:'center',padding:'6px 8px',borderRadius:8,background:'rgba(16,185,129,.12)',border:'none',cursor:'pointer',color:'rgba(52,211,153,.8)',fontSize:11,fontWeight:700,textDecoration:'none'}}>
                     Out
                   </Link>
-                  <button onClick={()=>del(p.id)} style={{padding:'6px 8px',borderRadius:8,background:'rgba(239,68,68,.08)',border:'none',cursor:'pointer',color:'rgba(248,113,113,.6)'}}>
+                  <button onClick={()=>del(p.id)} style={{padding:'6px 8px',borderRadius:8,background:'rgba(239,68,68,.08)',border:'none',cursor:'pointer',color:'rgba(248,113,113,.6)',flex:'0 0 auto'}}>
                     <Trash2 size={13}/>
                   </button>
                 </div>

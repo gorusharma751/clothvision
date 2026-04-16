@@ -22,14 +22,14 @@ export default function OwnerDashboard() {
 
   return (
     <Layout title={user?.shop_name||'My Shop'} subtitle="AI Fashion Studio"
-      actions={<Link to="/owner/studio" className="btn-primary"><Wand2 size={14}/>Open Studio</Link>}>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:14,marginBottom:28}}>
+      actions={<Link to="/owner/studio" className="btn-primary" style={{padding:'8px 12px',whiteSpace:'nowrap'}}><Wand2 size={14}/>Open Studio</Link>}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(132px,1fr))',gap:14,marginBottom:28}}>
         <StatCard icon={Package} label="Products" value={products.length} color="purple" index={0}/>
         <StatCard icon={Wand2} label="Images Generated" value={totalImages} color="green" index={1}/>
         <StatCard icon={Coins} label="Credits Left" value={credits.balance} color="gold" index={2}/>
         <StatCard icon={TrendingUp} label="Credits Used" value={credits.total_used} color="red" index={3}/>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:14,marginBottom:28}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:14,marginBottom:28}}>
         {[
           {to:'/owner/studio',emoji:'🎨',title:'AI Studio',desc:'Generate photos with AI',color:'#7c3aed',bg:'rgba(124,58,237,.08)',border:'rgba(124,58,237,.2)'},
           {to:'/owner/products',emoji:'📦',title:'My Products',desc:'View all your products',color:'#a78bfa',bg:'rgba(124,58,237,.05)',border:'rgba(124,58,237,.15)'},
@@ -46,12 +46,12 @@ export default function OwnerDashboard() {
         ))}
       </div>
       {products.length>0 && (
-        <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+        <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:'clamp(14px,2.4vw,20px)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:10,flexWrap:'wrap'}}>
             <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff'}}>Recent Products</h2>
             <Link to="/owner/products" style={{fontSize:12,color:'rgba(124,58,237,.7)',textDecoration:'none',display:'flex',alignItems:'center',gap:4}}>View all <ArrowRight size={12}/></Link>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:10}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(100px,1fr))',gap:10}}>
             {products.slice(0,8).map(p=>(
               <Link key={p.id} to="/owner/studio" style={{textDecoration:'none'}}>
                 <div style={{aspectRatio:'3/4',borderRadius:10,overflow:'hidden',background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.1)',marginBottom:6}}>

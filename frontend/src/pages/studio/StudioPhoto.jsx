@@ -382,7 +382,7 @@ export default function StudioPhoto() {
     <Layout title="Configure Your Shoot" subtitle={`${CATEGORIES[cat]?.label} → ${subCat} → ${prodType}`}
       actions={<button onClick={()=>setStep(2)} className="btn btn-outline"><ChevronLeft size={15}/>Back</button>}>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,maxWidth:1100}} className="responsive-grid">
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:20,maxWidth:1100}} className="responsive-grid">
         {/* LEFT: Uploads */}
         <div style={{display:'flex',flexDirection:'column',gap:16}}>
 
@@ -393,7 +393,7 @@ export default function StudioPhoto() {
 
             {/* Existing files grid */}
             {productPreviews.length > 0 && (
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(84px,1fr))',gap:8,marginBottom:12}}>
                 {productPreviews.map((prev,i)=>(
                   <div key={i} style={{position:'relative',aspectRatio:'1',borderRadius:10,overflow:'hidden',border:'1px solid rgba(124,58,237,0.3)'}}>
                     <img src={prev} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
@@ -498,7 +498,7 @@ export default function StudioPhoto() {
           {/* Product details */}
           <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:'1.25rem'}}>
             <p style={{fontFamily:'Syne,sans-serif',fontWeight:700,color:'#fff',marginBottom:12,fontSize:'0.9rem'}}>Product Details</p>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
               {[['name','Product Name','e.g. Premium Cotton Shirt'],['color','Color','e.g. Navy Blue'],['material','Material','e.g. 100% Cotton'],['size_range','Size Range','e.g. XS-3XL'],['brand','Brand','e.g. Zara'],].map(([k,l,ph])=>(
                 <div key={k} className={k==='name'?'col-span-2':''} style={k==='name'?{gridColumn:'span 2'}:{}}>
                   <label className="label">{l}</label>
@@ -514,9 +514,9 @@ export default function StudioPhoto() {
 
           {/* Output angles */}
           <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:'1.25rem'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:8}}>
               <p style={{fontFamily:'Syne,sans-serif',fontWeight:700,color:'#fff',fontSize:'0.9rem'}}>Output Angles</p>
-              <div style={{display:'flex',gap:6}}>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                 {Object.keys(OUTPUT_PRESETS).map(p=>(
                   <button key={p} onClick={()=>applyPreset(p)} style={{padding:'3px 10px',borderRadius:20,border:`1px solid ${platform===p?'#f0b429':'rgba(124,58,237,0.2)'}`,background:platform===p?'rgba(240,180,41,0.1)':'transparent',color:platform===p?'#f0b429':'#6b6b8a',fontSize:'0.65rem',cursor:'pointer',fontWeight:platform===p?700:400,textTransform:'uppercase',letterSpacing:'0.05em'}}>
                     {p}
@@ -524,7 +524,7 @@ export default function StudioPhoto() {
                 ))}
               </div>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(82px,1fr))',gap:6}}>
               {ANGLES_LIST.map(a=>(
                 <button key={a.id} onClick={()=>toggleAngle(a.id)}
                   style={{padding:'7px 4px',borderRadius:10,border:`1px solid ${selectedAngles.includes(a.id)?'rgba(124,58,237,0.5)':'rgba(124,58,237,0.12)'}`,background:selectedAngles.includes(a.id)?'rgba(124,58,237,0.15)':'transparent',color:selectedAngles.includes(a.id)?'#c4b5fd':'#4a4a6a',fontSize:'0.65rem',cursor:'pointer',textAlign:'center',transition:'all 0.15s',fontWeight:selectedAngles.includes(a.id)?600:400}}>

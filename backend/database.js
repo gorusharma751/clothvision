@@ -37,10 +37,17 @@ const normalizeDbConnectionError = (error) => {
     }
   })();
 
-  if (/ENOTFOUND/i.test(raw) && /railway\.internal/i.test(raw + ' ' + databaseUrl)) {
-    return new Error(
-      'Cannot resolve postgres.railway.internal. Use a Railway Postgres URL reachable from this runtime (same project private network or Railway public connection URL).'
-    );
+  if (/ENOTFOUND/i.test(raw)) {
+    try {
+      const parsed = new URL(databaseUrl);
+      return new Error(
+        `Cannot resolve database host "${parsed.hostname}". Verify DATABASE_URL is correct and reachable from this runtime. If using Heroku Postgres, copy the exact DATABASE_URL from Heroku Config Vars.`
+      );
+    } catch {
+      return new Error(
+        'Cannot resolve database host from DATABASE_URL. Verify the host is valid and reachable from this runtime.'
+      );
+    }
   }
 
   if (/password authentication failed for user/i.test(raw)) {

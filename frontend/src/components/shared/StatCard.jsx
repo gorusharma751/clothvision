@@ -3,12 +3,12 @@ const colors={purple:{bg:'rgba(124,58,237,.08)',border:'rgba(124,58,237,.2)',ico
 export default function StatCard({icon:Icon,label,value,color='purple',index=0}){
   const c=colors[color]||colors.purple;
   return(
-    <div className="cv-card animate-fade-up" style={{padding:'1.25rem',borderColor:c.border,animationDelay:`${index*.08}s`}}>
-      <div style={{width:40,height:40,borderRadius:12,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:12}}>
-        <Icon size={20} color={c.icon}/>
+    <div className="cv-card animate-fade-up" style={{padding:'clamp(.9rem,2.2vw,1.25rem)',borderColor:c.border,animationDelay:`${index*.08}s`}}>
+      <div style={{width:38,height:38,borderRadius:12,background:c.bg,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:10}}>
+        <Icon size={19} color={c.icon}/>
       </div>
-      <p style={{fontSize:'1.6rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:c.val,marginBottom:4}}>{value??'–'}</p>
-      <p style={{fontSize:'.8rem',color:'rgba(162,140,250,.5)'}}>{label}</p>
+      <p style={{fontSize:'clamp(1.15rem,4vw,1.6rem)',fontWeight:700,fontFamily:'Syne,sans-serif',color:c.val,marginBottom:3,lineHeight:1.2}}>{value??'–'}</p>
+      <p style={{fontSize:'clamp(.72rem,2.3vw,.8rem)',color:'rgba(162,140,250,.5)'}}>{label}</p>
     </div>
   );
 }
