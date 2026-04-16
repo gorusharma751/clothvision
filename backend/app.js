@@ -71,11 +71,19 @@ const createAdmin = async () => {
       console.warn('Skipping admin bootstrap: ADMIN_EMAIL or ADMIN_PASSWORD is not set.');
       return;
     }
-    const { rows } = await query('SELECT id FROM users WHERE email=$1', [email]);
+    const { rows } = await query('SELECT id, role FROM users WHERE email=$1', [email]);
     if (!rows.length) {
       const hashed = await bcrypt.hash(password, 10);
       await query('INSERT INTO users (email, password, name, role) VALUES ($1,$2,$3,$4)', [email, hashed, 'Super Admin', 'admin']);
       console.log(`✅ Admin created: ${email}`);
+      return;
+    }
+
+    const existing = rows[0];
+    if (existing.role !== 'admin') {
+      const hashed = await bcrypt.hash(password, 10);
+      await query('UPDATE users SET role=$1, password=$2, updated_at=NOW() WHERE id=$3', ['admin', hashed, existing.id]);
+      console.log(`✅ Existing user promoted to admin: ${email}`);
     }
   } catch (err) {
     console.error('Admin create error:', err.message);
