@@ -43,6 +43,28 @@ function Chip({ label, emoji, selected, onClick, color = '#7c3aed' }) {
   );
 }
 
+function CompactSteps({ current, steps, onStepClick }) {
+  return (
+    <div className="scene-steps-wrap" style={{ display: 'grid', gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`, gap: 8, marginBottom: 22 }}>
+      {steps.map((s, i) => (
+        <div
+          key={s}
+          onClick={() => i < current && onStepClick?.(i)}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, cursor: i < current ? 'pointer' : 'default' }}
+        >
+          <div style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: i < current ? 'rgba(34,197,94,.2)' : i === current ? 'rgba(240,180,41,.2)' : 'rgba(30,30,45,.5)', color: i < current ? '#4ade80' : i === current ? '#f0b429' : 'rgba(162,140,250,.3)', border: `1px solid ${i < current ? 'rgba(34,197,94,.3)' : i === current ? 'rgba(240,180,41,.4)' : 'rgba(124,58,237,.1)'}` }}>
+            {i < current ? '✓' : i + 1}
+          </div>
+          <span style={{ fontSize: 11, fontWeight: i === current ? 600 : 500, color: i === current ? '#f0b429' : 'rgba(162,140,250,.42)', lineHeight: 1.2, textAlign: 'center' }}>
+            {s}
+          </span>
+        </div>
+      ))}
+      <style>{`@media(max-width:520px){.scene-steps-wrap span{font-size:10px!important}}`}</style>
+    </div>
+  );
+}
+
 const FALLBACK_PRESETS = {
   surface_types: [
     { id: 'table', label: 'Table / Desk', emoji: '🪑', desc: 'Place product on table surface' },
@@ -251,44 +273,37 @@ export default function SceneBuilder() {
   ];
 
   return (
-    <Layout contentPadding={0}>
-    <div style={{ minHeight: '100vh', background: '#0a0a0f' }}>
-      {/* Header */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(10,10,15,.95)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(240,180,41,.1)' }}>
-        <button onClick={() => step === 0 ? nav('/owner/studio') : setStep(s => s - 1)} style={{ width: 36, height: 36, borderRadius: 10, border: '1px solid rgba(240,180,41,.25)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f0b429' }}>
-          <ArrowLeft size={16} />
+    <Layout
+      title="Scene Builder"
+      subtitle="Place product in any background"
+      contentPadding={0}
+      actions={
+        <button onClick={() => step === 0 ? nav('/owner/studio') : setStep(s => s - 1)} className="btn btn-outline" style={{ padding: '6px 10px', fontSize: 12, borderRadius: 8 }}>
+          <ArrowLeft size={13} />{step === 0 ? 'Studio' : 'Back'}
         </button>
-        <div>
-          <h1 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, fontSize: '1rem', color: '#fff' }}>
-            🛋️ Scene Builder
-          </h1>
-          <p style={{ fontSize: 11, color: 'rgba(240,180,41,.45)' }}>Place product in any background — Flipkart ready</p>
+      }
+    >
+    <div style={{ minHeight: '100vh', background: '#0a0a0f' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 'clamp(14px,2.6vw,24px) 16px' }}>
+        <div className="scene-platform-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          <p style={{ fontSize: 11, color: 'rgba(240,180,41,.55)', letterSpacing: '.1em', fontFamily: 'Syne,sans-serif' }}>SELLING PLATFORM</p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['flipkart', 'amazon'].map(p => (
+              <button
+                key={p}
+                onClick={() => {
+                  setPlatform(p);
+                  setOutputFormat(p === 'flipkart' ? 'flipkart_square' : 'amazon_rect');
+                }}
+                style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${platform === p ? 'rgba(240,180,41,.5)' : 'rgba(124,58,237,.15)'}`, background: platform === p ? 'rgba(240,180,41,.1)' : 'transparent', color: platform === p ? '#f0b429' : 'rgba(162,140,250,.4)', fontSize: 11, fontWeight: platform === p ? 600 : 500, cursor: 'pointer', textTransform: 'capitalize' }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-          {['flipkart', 'amazon'].map(p => (
-            <button key={p} onClick={() => { setPlatform(p); setOutputFormat(p === 'flipkart' ? 'flipkart_square' : 'amazon_rect'); }}
-              style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${platform === p ? 'rgba(240,180,41,.5)' : 'rgba(124,58,237,.15)'}`, background: platform === p ? 'rgba(240,180,41,.1)' : 'transparent', color: platform === p ? '#f0b429' : 'rgba(162,140,250,.4)', fontSize: 11, fontWeight: platform === p ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize' }}>
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>   
-        {/* Step indicators */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
-          {STEPS.map((s, i) => (
-            <React.Fragment key={i}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: i < step ? 'pointer' : 'default' }} onClick={() => i < step && setStep(i)}>  
-                <div style={{ width: 26, height: 26, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, background: i < step ? 'rgba(34,197,94,.2)' : i === step ? 'rgba(240,180,41,.2)' : 'rgba(30,30,45,.5)', color: i < step ? '#4ade80' : i === step ? '#f0b429' : 'rgba(162,140,250,.3)', border: `1px solid ${i < step ? 'rgba(34,197,94,.3)' : i === step ? 'rgba(240,180,41,.4)' : 'rgba(124,58,237,.1)'}` }}>        
-                  {i < step ? '✓' : i + 1}
-                </div>
-                <span style={{ fontSize: 12, fontWeight: i === step ? 600 : 400, color: i === step ? '#f0b429' : 'rgba(162,140,250,.35)' }}>{s}</span>
-              </div>
-              {i < STEPS.length - 1 && <div style={{ flex: 1, height: 1, background: 'rgba(240,180,41,.08)', minWidth: 16 }} />}
-            </React.Fragment>
-          ))}
-        </div>
+        <CompactSteps current={step} steps={STEPS} onStepClick={setStep} />
 
         {/* STEP 0 — Upload */}
         {step === 0 && (
@@ -323,12 +338,12 @@ export default function SceneBuilder() {
         {/* STEP 1 — Scene Setup */}
         {step === 1 && (
           <div style={{ animation: 'fadeUp .4s ease' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 10, flexWrap: 'wrap' }}>
               <div>
                 <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, color: '#fff', fontSize: '1.2rem' }}>Scene Setup</h2>
                 <p style={{ color: 'rgba(162,140,250,.4)', fontSize: '.85rem' }}>Where should the product be placed?</p>
               </div>
-              <button onClick={getAiSuggestion} disabled={loadingSuggestion} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.1)', color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>  
+              <button onClick={getAiSuggestion} disabled={loadingSuggestion} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, border: '1px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.1)', color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 {loadingSuggestion ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 AI Suggest
               </button>
@@ -458,7 +473,7 @@ export default function SceneBuilder() {
               </div>
             ) : results.length > 0 ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
                   <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, color: '#fff' }}>✨ Your Scenes ({results.length})</h2>
                   <button onClick={() => { setResults([]); setStep(0); }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(240,180,41,.25)', background: 'transparent', color: '#f0b429', fontSize: 12, cursor: 'pointer' }}>
                     New Scene
@@ -501,7 +516,7 @@ export default function SceneBuilder() {
 
         {/* Navigation */}
         {step < 3 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(240,180,41,.08)' }}>        
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, paddingTop: 20, borderTop: '1px solid rgba(240,180,41,.08)', gap: 10, flexWrap: 'wrap' }}>
             <button onClick={() => step === 0 ? nav('/owner/studio') : setStep(s => s - 1)} className="btn-ghost">
               <ArrowLeft size={14} />Back
             </button>
@@ -519,7 +534,7 @@ export default function SceneBuilder() {
           </div>
         )}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} @media(max-width:560px){.scene-platform-row{margin-bottom:12px!important}}`}</style>
     </div>
     </Layout>
   );

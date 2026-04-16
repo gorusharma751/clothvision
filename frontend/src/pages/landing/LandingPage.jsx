@@ -76,20 +76,20 @@ export default function LandingPage() {
       )}
 
       {/* Navbar */}
-      <nav style={{position:'sticky',top:0,zIndex:100,background:'rgba(10,10,15,.94)',backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(124,58,237,.15)',padding:'14px 5%',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <nav className="landing-nav" style={{position:'sticky',top:0,zIndex:100,background:'rgba(10,10,15,.94)',backdropFilter:'blur(20px)',borderBottom:'1px solid rgba(124,58,237,.15)',padding:'14px 5%',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:32,height:32,borderRadius:9,background:'linear-gradient(135deg,#7c3aed,#4c1d95)',display:'flex',alignItems:'center',justifyContent:'center'}}>
             <Sparkles size={16} color="#fff"/>
           </div>
           <span style={{fontFamily:'Syne,sans-serif',fontWeight:800,fontSize:'1.1rem',background:'linear-gradient(90deg,#a78bfa,#f0b429)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>ClothVision</span>
         </div>
-        <div style={{display:'flex',gap:24,alignItems:'center',fontSize:14,color:'rgba(226,226,240,.55)'}}>
+        <div className="landing-nav-links" style={{display:'flex',gap:24,alignItems:'center',fontSize:14,color:'rgba(226,226,240,.55)'}}>
           {[['Features','#features'],['How It Works','#how'],['Pricing','#pricing'],['FAQs','#faqs']].map(([l,h])=>(
             <a key={l} href={h} style={{color:'rgba(226,226,240,.55)',textDecoration:'none',transition:'color .2s'}}
               onMouseEnter={e=>e.target.style.color='#fff'} onMouseLeave={e=>e.target.style.color='rgba(226,226,240,.55)'}>{l}</a>
           ))}
         </div>
-        <div style={{display:'flex',gap:10}}>
+        <div className="landing-nav-actions" style={{display:'flex',gap:10,flexWrap:'wrap'}}>
           <Link to="/login" style={{padding:'8px 18px',borderRadius:10,border:'1px solid rgba(124,58,237,.3)',color:'#a78bfa',textDecoration:'none',fontSize:13,fontWeight:600}}>Login</Link>
           <Link to="/register" style={{padding:'8px 18px',borderRadius:10,background:'linear-gradient(135deg,#7c3aed,#6d28d9)',color:'#fff',textDecoration:'none',fontSize:13,fontWeight:700}}>Try Now →</Link>
         </div>
@@ -221,7 +221,7 @@ export default function LandingPage() {
               Create FREE Product Images <ArrowRight size={15}/>
             </Link>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12}}>
             {[
               {title:'Without AI',period:'Last Month',amount:'₹49,876',orders:'638 orders',bg:'rgba(255,255,255,.02)',border:'rgba(30,30,45,.8)',extra:null},
               {title:'With ClothVision',period:'This Month',amount:'₹1,05,849',orders:'1,198 orders',bg:'rgba(124,58,237,.06)',border:'rgba(124,58,237,.35)',extra:['+88% Orders','+112% Revenue']},
@@ -349,6 +349,40 @@ export default function LandingPage() {
           © 2026 ClothVision AI. All rights reserved. Powered by Gemini AI.
         </div>
       </footer>
+      <style>{`
+        @media (max-width: 980px){
+          .landing-nav{
+            justify-content:center;
+          }
+
+          .landing-nav-links{
+            order:3;
+            width:100%;
+            justify-content:center;
+            flex-wrap:wrap;
+            gap:12px;
+          }
+
+          .landing-nav-actions{
+            justify-content:flex-end;
+          }
+        }
+
+        @media (max-width: 640px){
+          .landing-nav-links{
+            display:none !important;
+          }
+
+          .landing-nav{
+            justify-content:space-between;
+          }
+
+          .landing-nav-actions a{
+            padding:8px 12px !important;
+            font-size:12px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

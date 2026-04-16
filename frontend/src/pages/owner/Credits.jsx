@@ -28,15 +28,15 @@ export default function OwnerCredits() {
   return (
     <Layout title="Credits" subtitle="AI generation credits"
       actions={<button onClick={()=>setShowReq(true)} className="btn-gold"><Plus size={14}/>Request Credits</button>}>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,marginBottom:24}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:14,marginBottom:24}}>
         <div style={{background:'rgba(240,180,41,.06)',border:'1px solid rgba(240,180,41,.2)',borderRadius:16,padding:'1.5rem',textAlign:'center'}}>
           <Coins size={28} color="#f0b429" style={{margin:'0 auto 8px'}}/>
-          <p style={{fontSize:'2.2rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#f0b429'}}>{balance.balance}</p>
+          <p style={{fontSize:'clamp(1.6rem,8vw,2.2rem)',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#f0b429'}}>{balance.balance}</p>
           <p style={{fontSize:12,color:'rgba(240,180,41,.5)'}}>Available Credits</p>
         </div>
         <div style={{background:'rgba(124,58,237,.06)',border:'1px solid rgba(124,58,237,.15)',borderRadius:16,padding:'1.5rem',textAlign:'center'}}>
           <TrendingDown size={28} color="#a78bfa" style={{margin:'0 auto 8px'}}/>
-          <p style={{fontSize:'2.2rem',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#a78bfa'}}>{balance.total_used}</p>
+          <p style={{fontSize:'clamp(1.6rem,8vw,2.2rem)',fontWeight:700,fontFamily:'Syne,sans-serif',color:'#a78bfa'}}>{balance.total_used}</p>
           <p style={{fontSize:12,color:'rgba(162,140,250,.4)'}}>Total Used</p>
         </div>
       </div>
@@ -46,7 +46,7 @@ export default function OwnerCredits() {
           {requests.length===0?<p style={{color:'rgba(162,140,250,.3)',fontSize:13,textAlign:'center',padding:'20px 0'}}>No requests yet</p>:(
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {requests.map(r=>(
-                <div key={r.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderRadius:10,background:'rgba(124,58,237,.04)',border:'1px solid rgba(124,58,237,.08)'}}>
+                <div key={r.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderRadius:10,background:'rgba(124,58,237,.04)',border:'1px solid rgba(124,58,237,.08)',gap:8,flexWrap:'wrap'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     {statusIcon(r.status)}
                     <div><p style={{fontSize:13,fontWeight:600,color:'#fff'}}>+{r.amount_requested}</p>{r.message&&<p style={{fontSize:11,color:'rgba(162,140,250,.4)'}}>{r.message}</p>}</div>
@@ -62,7 +62,7 @@ export default function OwnerCredits() {
           {history.length===0?<p style={{color:'rgba(162,140,250,.3)',fontSize:13,textAlign:'center',padding:'20px 0'}}>No transactions</p>:(
             <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:320,overflowY:'auto'}}>
               {history.map(h=>(
-                <div key={h.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:8,transition:'background .2s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.02)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <div key={h.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',borderRadius:8,transition:'background .2s',gap:8,flexWrap:'wrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.02)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{width:28,height:28,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',background:h.type==='add'?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)'}}>
                       {h.type==='add'?<TrendingUp size={13} color="#4ade80"/>:<TrendingDown size={13} color="#f87171"/>}
@@ -90,7 +90,7 @@ export default function OwnerCredits() {
             <label style={{fontSize:11,color:'rgba(162,140,250,.5)',display:'block',marginBottom:6,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>MESSAGE TO ADMIN</label>
             <textarea className="cv-input" rows={3} value={message} onChange={e=>setMessage(e.target.value)} placeholder="Why do you need credits..." style={{resize:'none'}}/>
           </div>
-          <div style={{display:'flex',gap:8}}>
+          <div style={{display:'flex',gap:8,flexDirection:'column'}}>
             <button type="button" onClick={()=>setShowReq(false)} className="btn-ghost" style={{flex:1}}>Cancel</button>
             <button type="submit" className="btn-gold" style={{flex:1}}>Send Request</button>
           </div>

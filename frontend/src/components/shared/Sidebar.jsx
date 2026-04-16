@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight, Images, Globe, Megaphone, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -10,6 +10,7 @@ const COLLAPSE_KEY = 'cv_sidebar_collapsed';
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const items = user?.role==='admin' ? adminNav : ownerNav;
@@ -21,6 +22,29 @@ export default function Sidebar() {
       setCollapsed(false);
     }
   }, []);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) setOpen(false);
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
 
   const handleLogout = () => { logout(); nav('/login'); };
   const toggleCollapsed = () => {
@@ -146,22 +170,28 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside style={{width:collapsed?88:236,transition:'width .25s ease',flexShrink:0,background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.12)',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100vh'}} className="hide-mobile">
+      <aside style={{width:collapsed?88:236,transition:'width .25s ease',flexShrink:0,background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.12)',display:'flex',flexDirection:'column',position:'sticky',top:0,height:'100dvh'}} className="hide-mobile">
         <Content compact={collapsed}/>
       </aside>
-      <button onClick={()=>setOpen(true)} style={{position:'fixed',top:12,left:12,zIndex:50,width:36,height:36,borderRadius:10,border:'1px solid rgba(124,58,237,.3)',background:'rgba(17,17,24,.9)',display:'none',alignItems:'center',justifyContent:'center',cursor:'pointer'}} className="show-mobile">
+      <button onClick={()=>setOpen(true)} style={{position:'fixed',top:'calc(env(safe-area-inset-top) + 10px)',left:'calc(env(safe-area-inset-left) + 10px)',zIndex:60,width:36,height:36,borderRadius:11,border:'1px solid rgba(124,58,237,.3)',background:'rgba(17,17,24,.94)',display:'none',alignItems:'center',justifyContent:'center',cursor:'pointer'}} className="show-mobile">
         <Menu size={16} color="#a78bfa"/>
       </button>
       {open && (
         <div style={{position:'fixed',inset:0,zIndex:100}} className="show-mobile">
           <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.6)'}} onClick={()=>setOpen(false)}/>
-          <aside style={{position:'absolute',left:0,top:0,bottom:0,width:240,background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.2)'}}>
+          <aside style={{position:'absolute',left:0,top:0,bottom:0,width:'min(84vw,280px)',background:'#0d0d15',borderRight:'1px solid rgba(124,58,237,.2)'}}>
             <button onClick={()=>setOpen(false)} style={{position:'absolute',top:12,right:12,background:'none',border:'none',cursor:'pointer',color:'#a78bfa'}}><X size={18}/></button>
             <Content mobile/>
           </aside>
         </div>
       )}
-      <style>{`.show-mobile{display:none!important} @media(max-width:768px){.hide-mobile{display:none!important}.show-mobile{display:flex!important}}`}</style>
+      <style>{`
+        .show-mobile{display:none!important}
+        @media(max-width:768px){
+          .hide-mobile{display:none!important}
+          .show-mobile{display:flex!important}
+        }
+      `}</style>
     </>
   );
 }

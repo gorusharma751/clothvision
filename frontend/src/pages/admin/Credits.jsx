@@ -35,7 +35,7 @@ export default function AdminCredits() {
         {requests.length === 0 && <div className="text-center py-20 text-purple-400/40">No requests yet</div>}
         {requests.map((r, i) => (
           <motion.div key={r.id} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} transition={{delay:i*0.04}}
-            className="rounded-xl p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-white/5 transition-colors"
+            className="rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-white/5 transition-colors"
             style={{background:'#111118', border:'1px solid #1e1e2d'}}
             onClick={() => { if(r.status==='pending') { setSelected(r); setApproveAmt(String(r.amount_requested)); }}}>
             <div className="flex items-center gap-3">
@@ -48,8 +48,8 @@ export default function AdminCredits() {
                 {r.message && <p className="text-xs text-purple-300/40 mt-0.5 flex items-center gap-1"><MessageSquare size={10}/>{r.message}</p>}
               </div>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className="text-right">
+            <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 w-full sm:w-auto">
+              <div className="text-left sm:text-right">
                 <p className="text-lg font-bold text-gold-400 font-display">+{r.amount_requested}</p>
                 <p className="text-xs text-purple-400/40">credits</p>
               </div>
@@ -74,7 +74,7 @@ export default function AdminCredits() {
             <label className="text-xs text-purple-300 font-display tracking-wider block mb-1">ADMIN NOTE</label>
             <input className="input-field" value={note} onChange={e=>setNote(e.target.value)} placeholder="Optional note to owner"/>
           </div>
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <button onClick={()=>handle('rejected')} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition-colors" style={{border:'1px solid rgba(239,68,68,0.2)'}}>Reject</button>
             <button onClick={()=>handle('approved')} className="flex-1 btn-gold">Approve & Add</button>
           </div>

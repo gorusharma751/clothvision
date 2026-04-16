@@ -94,13 +94,13 @@ export default function MarketingStudio() {
         </button>
       }
     >
-      <div style={{maxWidth:980,margin:'0 auto',padding:'24px 16px',minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:20}}>
+      <div style={{maxWidth:980,margin:'0 auto',padding:'clamp(14px,2.8vw,24px) 16px',minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:20}}>
           {/* Left */}
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18}}>
               <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:12,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>1. UPLOAD IMAGES</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10}}>
                 <div>
                   <p style={{fontSize:10,color:'rgba(124,58,237,.4)',marginBottom:5}}>PRODUCT *</p>
                   <DropBox preview={pPrev} onFile={f=>{setPFile(f);setPPrev(URL.createObjectURL(f));}} onRemove={()=>{setPFile(null);setPPrev(null);}} label="Product photo" sublabel="Main product" required/>
@@ -129,7 +129,7 @@ export default function MarketingStudio() {
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:18}}>
               <p style={{fontSize:11,color:'rgba(124,58,237,.5)',marginBottom:12,fontFamily:'Syne,sans-serif',letterSpacing:'.1em'}}>3. POSTER STYLE</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8}}>
                 {STYLES.map(s=>(
                   <div key={s.id} onClick={()=>setStyle(s.id)} style={{padding:'9px 7px',borderRadius:9,border:`1px solid ${style===s.id?'rgba(124,58,237,.5)':'rgba(30,30,45,.8)'}`,background:style===s.id?'rgba(124,58,237,.1)':'transparent',cursor:'pointer',textAlign:'center',transition:'all .2s'}}>
                     <span style={{fontSize:18,display:'block',marginBottom:3}}>{s.emoji}</span>
@@ -160,7 +160,7 @@ export default function MarketingStudio() {
         </div>
         {result?.image_url && (
           <div style={{marginTop:24,background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20,animation:'fadeUp .4s ease'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,gap:10,flexWrap:'wrap'}}>
               <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff'}}>📱 Your Poster</h3>
               <button onClick={download} className="btn-primary" style={{fontSize:12,padding:'7px 14px'}}><Download size={12}/>Download</button>
             </div>
@@ -169,7 +169,7 @@ export default function MarketingStudio() {
             </div>
             {caption && (
               <div style={{padding:'12px 14px',borderRadius:11,background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.14)'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:7,gap:8,flexWrap:'wrap'}}>
                   <p style={{fontSize:12,fontWeight:600,color:'#a78bfa'}}>📝 Instagram Caption</p>
                   <button onClick={copyCaption} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 9px',borderRadius:7,border:'1px solid rgba(124,58,237,.22)',background:'transparent',color:copied?'#4ade80':'#a78bfa',fontSize:11,cursor:'pointer',fontWeight:600}}>
                     {copied?<><Check size={10}/>Copied!</>:<><Copy size={10}/>Copy</>}

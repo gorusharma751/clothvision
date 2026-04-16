@@ -57,18 +57,16 @@ function ImageBox({ file, preview, onFile, onRemove, label, sublabel }) {
 /* ── Step indicator ── */
 function Steps({ current, steps }) {
   return (
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:28,flexWrap:'wrap'}}>
+    <div className="dress-steps-wrap" style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(0,1fr))',gap:8,marginBottom:22}}>
       {steps.map((s,i)=>(
-        <React.Fragment key={i}>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <div style={{width:26,height:26,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,fontFamily:'Syne,sans-serif',background:i<current?'rgba(34,197,94,.2)':i===current?'rgba(124,58,237,.3)':'rgba(30,30,45,.5)',color:i<current?'#4ade80':i===current?'#a78bfa':'rgba(162,140,250,.3)',border:`1px solid ${i<current?'rgba(34,197,94,.3)':i===current?'rgba(124,58,237,.5)':'rgba(124,58,237,.1)'}`}}>
-              {i<current?'✓':(i+1)}
-            </div>
-            <span style={{fontSize:12,fontWeight:i===current?600:400,color:i===current?'#a78bfa':'rgba(162,140,250,.35)'}}>{s}</span>
+        <div key={s} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6,minWidth:0}}>
+          <div style={{width:24,height:24,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,fontFamily:'Syne,sans-serif',background:i<current?'rgba(34,197,94,.2)':i===current?'rgba(124,58,237,.3)':'rgba(30,30,45,.5)',color:i<current?'#4ade80':i===current?'#a78bfa':'rgba(162,140,250,.3)',border:`1px solid ${i<current?'rgba(34,197,94,.3)':i===current?'rgba(124,58,237,.5)':'rgba(124,58,237,.1)'}`}}>
+            {i<current?'✓':(i+1)}
           </div>
-          {i<steps.length-1 && <div style={{flex:1,height:1,background:'rgba(124,58,237,.1)',minWidth:16}}/>}
-        </React.Fragment>
+          <span style={{fontSize:11,fontWeight:i===current?600:500,color:i===current?'#a78bfa':'rgba(162,140,250,.42)',lineHeight:1.2,textAlign:'center'}}>{s}</span>
+        </div>
       ))}
+      <style>{`@media(max-width:520px){.dress-steps-wrap span{font-size:10px!important}}`}</style>
     </div>
   );
 }
@@ -211,13 +209,13 @@ export default function DressStudio() {
       subtitle="AI-powered fashion photography"
       contentPadding={0}
       actions={
-        <button onClick={()=> step===0 ? nav('/owner/studio') : setStep(s=>s-1)} className="btn btn-outline" style={{padding:'8px 12px'}}>
-          <ArrowLeft size={14}/>{step===0 ? 'Back to Studio' : 'Back Step'}
+        <button onClick={()=> step===0 ? nav('/owner/studio') : setStep(s=>s-1)} className="btn btn-outline" style={{padding:'6px 10px',fontSize:12,borderRadius:8}}>
+          <ArrowLeft size={13}/>{step===0 ? 'Studio' : 'Back'}
         </button>
       }
     >
       <div style={{minHeight:'calc(100vh - 84px)',background:'#0a0a0f'}}>
-        <div style={{maxWidth:900,margin:'0 auto',padding:'24px 16px'}}>
+        <div style={{maxWidth:900,margin:'0 auto',padding:'clamp(14px,2.6vw,24px) 16px'}}>
         <Steps current={step} steps={STEPS}/>
 
         {/* ── STEP 0: Gender + Category ── */}
@@ -225,13 +223,13 @@ export default function DressStudio() {
           <div className="animate-fade-up">
             <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1.4rem',color:'#fff',marginBottom:6,textAlign:'center'}}>Select Category</h2>
             <p style={{color:'rgba(162,140,250,.45)',textAlign:'center',marginBottom:28,fontSize:'.9rem'}}>Who is this clothing for?</p>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,marginBottom:24}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:20,maxWidth:620,margin:'0 auto 20px'}}>
               {GENDERS.map(g=>(
                 <div key={g.id} onClick={()=>{setGender(g);setSubType(null);setShowSub(true);}}
-                  style={{border:`2px solid ${gender?.id===g.id?'rgba(124,58,237,.6)':'rgba(30,30,45,.8)'}`,borderRadius:16,padding:'20px 12px',textAlign:'center',cursor:'pointer',background:gender?.id===g.id?'rgba(124,58,237,.1)':'rgba(17,17,24,.8)',transition:'all .25s'}}
+                  style={{border:`2px solid ${gender?.id===g.id?'rgba(124,58,237,.6)':'rgba(30,30,45,.8)'}`,borderRadius:14,padding:'14px 8px',textAlign:'center',cursor:'pointer',background:gender?.id===g.id?'rgba(124,58,237,.1)':'rgba(17,17,24,.8)',transition:'all .25s'}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(124,58,237,.4)'}
                   onMouseLeave={e=>e.currentTarget.style.borderColor=gender?.id===g.id?'rgba(124,58,237,.6)':'rgba(30,30,45,.8)'}>
-                  <div style={{fontSize:36,marginBottom:10}}>{g.emoji}</div>
+                  <div style={{fontSize:30,marginBottom:8}}>{g.emoji}</div>
                   <p style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:gender?.id===g.id?'#a78bfa':'rgba(226,226,240,.8)',fontSize:'.95rem'}}>{g.label}</p>
                 </div>
               ))}
@@ -254,7 +252,7 @@ export default function DressStudio() {
         {/* ── STEP 1: Upload Products ── */}
         {step===1 && (
           <div className="animate-fade-up">
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,gap:10,flexWrap:'wrap'}}>
               <div>
                 <h2 style={{fontFamily:'Syne,sans-serif',fontWeight:700,fontSize:'1.3rem',color:'#fff'}}>Upload Your Products</h2>
                 <p style={{color:'rgba(162,140,250,.4)',fontSize:'.85rem',marginTop:3}}>Add all product photos — they'll be merged with the model</p>
@@ -374,9 +372,9 @@ export default function DressStudio() {
 
               {/* Angles */}
               <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:20,gridColumn:'1/-1'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,gap:8,flexWrap:'wrap'}}>
                   <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',fontSize:'1rem'}}>📐 Output Angles</h3>
-                  <div style={{display:'flex',gap:6}}>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                     <button onClick={()=>setSelectedAngles(['front','back','walking','closeup'])} style={{padding:'4px 10px',borderRadius:8,border:'1px solid rgba(124,58,237,.2)',background:'transparent',color:'#a78bfa',fontSize:11,cursor:'pointer'}}>Flipkart</button>
                     <button onClick={()=>setSelectedAngles(['front','back','side','3_4','closeup'])} style={{padding:'4px 10px',borderRadius:8,border:'1px solid rgba(240,180,41,.2)',background:'transparent',color:'#f0b429',fontSize:11,cursor:'pointer'}}>Amazon</button>
                     <button onClick={()=>setSelectedAngles(ANGLES.map(a=>a.id))} style={{padding:'4px 10px',borderRadius:8,border:'1px solid rgba(124,58,237,.15)',background:'transparent',color:'rgba(162,140,250,.5)',fontSize:11,cursor:'pointer'}}>All</button>
@@ -477,7 +475,7 @@ export default function DressStudio() {
 
         {/* Navigation buttons */}
         {step < 3 && (
-          <div style={{display:'flex',justifyContent:'space-between',marginTop:28,paddingTop:20,borderTop:'1px solid rgba(124,58,237,.1)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:28,paddingTop:20,borderTop:'1px solid rgba(124,58,237,.1)',gap:10,flexWrap:'wrap'}}>
             <button onClick={()=>step===0?nav('/owner/studio'):setStep(s=>s-1)} className="btn-ghost">
               <ArrowLeft size={14}/>Back
             </button>

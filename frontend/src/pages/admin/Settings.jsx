@@ -29,7 +29,7 @@ export default function AdminSettings() {
     <Layout title="Settings" subtitle="Credit costs & platform configuration"
       actions={<button onClick={save} disabled={loading} className="btn btn-purple"><Save size={15}/>{loading?'Saving...':'Save All'}</button>}>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))',gap:16,marginBottom:24}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16,marginBottom:24}}>
         {plans.map((p,i)=>(
           <motion.div key={p.plan_name} initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:i*0.08}}
             style={{background:'#111118',border:`1px solid ${p.plan_name==='pro'?'rgba(124,58,237,0.4)':'#1e1e2d'}`,borderRadius:16,padding:'1.25rem'}}>
@@ -50,12 +50,12 @@ export default function AdminSettings() {
 
       {/* Theme preview */}
       <div style={{background:'#111118',border:'1px solid #1e1e2d',borderRadius:16,padding:'1.25rem'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}>
           <Palette size={16} color="#a78bfa"/>
           <h3 style={{fontFamily:'Syne,sans-serif',fontWeight:700,color:'#fff',fontSize:'0.95rem'}}>Available Themes</h3>
           <span style={{fontSize:'0.7rem',color:'#6b6b8a'}}>Assign to owners from Owners page</span>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10}}>
           {THEMES.map(t=>(
             <div key={t.id} style={{borderRadius:12,overflow:'hidden',border:'1px solid #1e1e2d'}}>
               <div style={{height:48,background:t.preview[0],display:'flex',alignItems:'center',gap:6,padding:'0 12px'}}>

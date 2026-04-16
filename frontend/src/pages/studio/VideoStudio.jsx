@@ -240,7 +240,7 @@ export default function VideoStudio() {
         </button>
       }
     >
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 16 }}>
         <div style={{ background: '#111118', border: '1px solid #1e1e2d', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <p style={{ fontFamily: 'Syne,sans-serif', letterSpacing: '.1em', fontSize: 11, color: 'rgba(239,68,68,.6)' }}>INPUT</p>
           <UploadBox
@@ -255,12 +255,12 @@ export default function VideoStudio() {
             }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
             <input className="cv-input" value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="Brand name" />
             <input className="cv-input" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Product name" />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
             <select className="cv-input" value={platform} onChange={(e) => setPlatform(e.target.value)}>
               <option value="instagram_reel">Instagram Reel</option>
               <option value="youtube_short">YouTube Short</option>
@@ -275,7 +275,7 @@ export default function VideoStudio() {
             </select>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
             <select className="cv-input" value={tone} onChange={(e) => setTone(e.target.value)}>
               <option value="premium">Premium</option>
               <option value="minimal">Minimal</option>

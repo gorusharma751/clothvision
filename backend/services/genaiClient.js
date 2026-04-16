@@ -97,7 +97,7 @@ export const getClient = (overrides = {}) => {
   const hasAdc = Boolean(envVal('GOOGLE_APPLICATION_CREDENTIALS'));
 
   if (!hasApiKey && !hasProject) {
-    const err = new Error('Vertex AI config missing. Set VERTEX_API_KEY or GOOGLE_CLOUD_PROJECT in backend/.env or Railway variables.');
+    const err = new Error('Vertex AI config missing. Set VERTEX_API_KEY or GOOGLE_CLOUD_PROJECT in backend/.env or Heroku variables.');
     err.code = 'GEMINI_VERTEX_CONFIG_MISSING';
     throw err;
   }
