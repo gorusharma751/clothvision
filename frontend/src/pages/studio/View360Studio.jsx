@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api, { getImageUrl } from '../../utils/api';
+import { getJobErrorMessage, getJobProgressImages, resolveJobResponse } from '../../utils/jobs';
 
 const ANGLE_ORDER = ['front', 'left_side', 'back', 'right_side'];
 const ANGLE_LABEL = {
@@ -79,19 +80,72 @@ export default function View360Studio() {
   const [productCategory, setProductCategory] = useState('');
   const [productDescription, setProductDescription] = useState('');
 
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [result, setResult] = useState(null);
+  const [pendingCards, setPendingCards] = useState([]);
+  const pollAbortRef = useRef(null);
+  const generationRunRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
 
   const sortedImages = useMemo(() => {
     const images = Array.isArray(result?.images) ? result.images : [];
     return [...images].sort((a, b) => ANGLE_ORDER.indexOf(a.angle) - ANGLE_ORDER.indexOf(b.angle));
   }, [result]);
 
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
+
+  const createPendingCards = (count) => {
+    const normalized = Math.max(1, Number(count) || 1);
+    generationRunRef.current += 1;
+    const runId = generationRunRef.current;
+    setPendingCards(Array.from({ length: normalized }, (_, index) => ({
+      id: `pending-${runId}-${index}`,
+      status: 'loading',
+      image: null,
+    })));
+    return runId;
+  };
+
+  const markPendingFailed = (runId) => {
+    setPendingCards((prev) => prev.map((card) => (
+      card.id.startsWith(`pending-${runId}-`) ? { ...card, status: 'failed' } : card
+    )));
+  };
+
+  const mergeProgressCards = (runId, incomingImages) => {
+    const normalizedImages = Array.isArray(incomingImages) ? incomingImages : [];
+    if (!normalizedImages.length || runId !== generationRunRef.current) return;
+
+    setPendingCards((prev) => prev.map((card, cardIndex) => {
+      if (!card.id.startsWith(`pending-${runId}-`)) return card;
+      const image = normalizedImages[cardIndex];
+      if (!image) return card;
+      return { ...card, status: 'completed', image };
+    }));
+  };
+
   const onGenerate = async () => {
+    if (isGenerating) return;
     if (!productFile) return toast.error('Upload product image first');
 
+    const runId = createPendingCards(ANGLE_ORDER.length);
+    const signal = startPollingSignal();
+
     setGenerating(true);
-    setResult(null);
+    setJobStatus('pending');
 
     try {
       const formData = new FormData();
@@ -104,11 +158,45 @@ export default function View360Studio() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      setResult(response.data);
-      toast.success(`360 view generated. Used ${response.data.credits_used} credits.`);
+      const settled = await resolveJobResponse(response.data, {
+        onStatusChange: (status, snapshot) => {
+          setJobStatus(status);
+          mergeProgressCards(runId, getJobProgressImages(snapshot));
+        },
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error(getJobErrorMessage(settled, '360 view generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      const images = Array.isArray(payload.images) ? payload.images : [];
+      if (!images.length) {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error('Generation finished but no 360 images were returned. Please retry.');
+        return;
+      }
+
+      mergeProgressCards(runId, images);
+      setPendingCards([]);
+      setResult(payload);
+      setJobStatus('completed');
+      toast.success(`360 view generated.${payload.credits_used ? ` Used ${payload.credits_used} credits.` : ''}`);
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
+      markPendingFailed(runId);
       toast.error(err.response?.data?.error || '360 view generation failed');
     } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
       setGenerating(false);
     }
   };
@@ -162,7 +250,9 @@ export default function View360Studio() {
           <textarea className="cv-input" value={productDescription} onChange={(e) => setProductDescription(e.target.value)} placeholder="Optional description for better context" style={{ resize: 'none', minHeight: 74 }} />
 
           <button className="btn-primary" onClick={onGenerate} disabled={generating || !productFile} style={{ width: '100%', justifyContent: 'center' }}>
-            {generating ? 'Generating...' : <><Wand2 size={14} />Generate 360 Views</>}
+            {generating
+              ? (jobStatus === 'pending' ? 'Queued for generation...' : 'Generating...')
+              : <><Wand2 size={14} />Generate 360 Views</>}
           </button>
         </div>
 
@@ -179,8 +269,43 @@ export default function View360Studio() {
             )}
           </div>
 
-          {sortedImages.length === 0 && (
-            <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 13 }}>Generate to preview 360 output set.</p>
+          {pendingCards.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ color: 'rgba(34,211,238,.85)', fontSize: 12, marginBottom: 8 }}>
+                {jobStatus === 'pending' ? 'Generation queued, preparing views...' : 'Generating updated 360 views...'}
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+                {pendingCards.map((card) => (
+                  <div key={card.id} style={{ border: '1px solid rgba(6,182,212,.2)', borderRadius: 11, overflow: 'hidden', background: '#0d0d15' }}>
+                    {card.status === 'completed' && card.image ? (
+                      <img
+                        src={String(card.image.image_url || card.image.url || '').startsWith('http') ? (card.image.image_url || card.image.url) : getImageUrl(card.image.image_url || card.image.url)}
+                        alt={card.image.angle || 'generated'}
+                        style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block' }}
+                      />
+                    ) : card.status === 'failed' ? (
+                      <div style={{ aspectRatio: '1 / 1', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 8, padding: 10, textAlign: 'center' }}>
+                        <p style={{ color: '#fca5a5', fontSize: 12 }}>View failed</p>
+                        <button onClick={onGenerate} className="btn btn-outline" style={{ padding: '5px 10px', fontSize: 11 }}>Retry</button>
+                      </div>
+                    ) : (
+                      <div style={{ aspectRatio: '1 / 1', padding: 10 }}>
+                        <div style={{ width: '100%', height: '100%', borderRadius: 8, background: 'linear-gradient(110deg, rgba(6,182,212,0.14) 30%, rgba(34,211,238,0.28) 45%, rgba(6,182,212,0.14) 60%)', backgroundSize: '220% 100%', animation: 'cvShimmer360 1.2s ease-in-out infinite' }} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {sortedImages.length === 0 && pendingCards.length === 0 && (
+            <p style={{ color: 'rgba(226,226,240,.45)', fontSize: 13 }}>
+              {generating
+                ? (jobStatus === 'pending' ? 'Generation queued. Your 360 output will appear here shortly.' : 'Generating 360 output...')
+                : 'Generate to preview 360 output set.'}
+            </p>
           )}
 
           {sortedImages.length > 0 && (
@@ -216,6 +341,7 @@ export default function View360Studio() {
           )}
         </div>
       </div>
+      <style>{`@keyframes cvShimmer360{0%{background-position:200% 0}100%{background-position:-40% 0}}`}</style>
     </Layout>
   );
 }

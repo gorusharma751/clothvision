@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, ArrowRight, X, Plus, Wand2, Download, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildUploadUrl } from '../../utils/uploads';
+import { getJobErrorMessage, getJobProgressImages, resolveJobResponse } from '../../utils/jobs';
 import Layout from '../../components/shared/Layout';
 
 const IMG = path => buildUploadUrl(path);
@@ -95,20 +96,82 @@ export default function ItemsStudio() {
   const [brandName, setBrandName] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [color, setColor] = useState('');
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [results, setResults] = useState([]);
+  const [pendingCards, setPendingCards] = useState([]);
   const [listingContent, setListingContent] = useState(null);
   const [listingPlatform, setListingPlatform] = useState('amazon');
   const [copied, setCopied] = useState('');
+  const pollAbortRef = useRef(null);
+  const generationRunRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  const getGeneratingLabel = () => {
+    if (jobStatus === 'pending') return 'Queued...';
+    if (jobStatus === 'processing') return 'Generating...';
+    return 'Generating...';
+  };
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
+
+  const createPendingCards = (count) => {
+    const normalized = Math.max(1, Number(count) || 1);
+    generationRunRef.current += 1;
+    const runId = generationRunRef.current;
+    setPendingCards(Array.from({ length: normalized }, (_, index) => ({
+      id: `pending-${runId}-${index}`,
+      status: 'loading',
+      image: null,
+    })));
+    return runId;
+  };
+
+  const markPendingFailed = (runId) => {
+    setPendingCards((prev) => prev.map((card) => (
+      card.id.startsWith(`pending-${runId}-`) ? { ...card, status: 'failed' } : card
+    )));
+  };
+
+  const mergeProgressCards = (runId, incomingImages) => {
+    const normalizedImages = Array.isArray(incomingImages) ? incomingImages : [];
+    if (!normalizedImages.length || runId !== generationRunRef.current) return;
+
+    setPendingCards((prev) => prev.map((card, cardIndex) => {
+      if (!card.id.startsWith(`pending-${runId}-`)) return card;
+      const image = normalizedImages[cardIndex];
+      if (!image) return card;
+      return { ...card, status: 'completed', image };
+    }));
+  };
 
   const addItem = () => setItems(prev => [...prev, { id: Date.now(), file:null, preview:null }]);
   const setItemFile = (id, file) => setItems(prev => prev.map(x => x.id===id ? {...x, file, preview:URL.createObjectURL(file)} : x));
   const clearItemFile = id => setItems(prev => prev.map(x => x.id===id ? {...x, file:null, preview:null} : x));
 
   const generate = async () => {
+    if (isGenerating) return;
     const productFiles = items.filter(x => x.file);
     if (!productFiles.length) return toast.error('Upload at least one product image');
-    setGenerating(true); setResults([]);
+    const runId = createPendingCards(1);
+    const signal = startPollingSignal();
+
+    setGenerating(true);
+    setJobStatus('pending');
+    setStep(2);
+
     try {
       const fd = new FormData();
       fd.append('name', productName || itemType?.label || 'Product');
@@ -120,11 +183,48 @@ export default function ItemsStudio() {
       const r = await api.post(`/products/${prodRes.data.id}/generate-bg`, {
         bg_style: bgStyle.toLowerCase().replace(' ', '_')
       });
-      if (r.data.image) { setResults([r.data.image]); setStep(2); toast.success('Product image generated!'); }
+
+      const settled = await resolveJobResponse(r.data, {
+        onStatusChange: (status, snapshot) => {
+          setJobStatus(status);
+          mergeProgressCards(runId, getJobProgressImages(snapshot));
+        },
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error(getJobErrorMessage(settled, 'Generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      if (!payload.image) {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error('Generation finished but no image was returned. Please retry.');
+        return;
+      }
+
+      mergeProgressCards(runId, [payload.image]);
+      setPendingCards([]);
+      setResults([payload.image]);
+      setJobStatus('completed');
+      toast.success('Product image generated!');
     } catch(err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
+      markPendingFailed(runId);
       if (err.response?.data?.error === 'Insufficient credits') toast.error('Not enough credits!');
       else toast.error(err.response?.data?.error || 'Generation failed');
-    } finally { setGenerating(false); }
+    } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
+      setGenerating(false);
+    }
   };
 
   const generateListing = async () => {
@@ -253,13 +353,39 @@ export default function ItemsStudio() {
 
         {step===2 && (
           <div className="animate-fade-up">
-            {generating ? (
-              <div style={{textAlign:'center',padding:'60px 20px'}}>
-                <div style={{width:56,height:56,borderRadius:'50%',border:'3px solid rgba(240,180,41,.2)',borderTopColor:'#f0b429',animation:'spin .8s linear infinite',margin:'0 auto 20px'}}/>
-                <p style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',marginBottom:8}}>Generating product images...</p>
-                <p style={{color:'rgba(162,140,250,.4)',fontSize:'.85rem'}}>Product details preserved accurately</p>
+            {pendingCards.length > 0 && (
+              <div style={{marginBottom:20}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
+                  <p style={{fontFamily:'Syne,sans-serif',fontWeight:700,color:'#fff'}}>
+                    {jobStatus === 'pending' ? 'Your job is queued' : 'Generating new image'}
+                  </p>
+                  <p style={{fontSize:12,color:'#f0b429'}}>{getGeneratingLabel()}</p>
+                </div>
+
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12}}>
+                  {pendingCards.map((card) => (
+                    <div key={card.id} style={{borderRadius:14,overflow:'hidden',background:'rgba(240,180,41,.04)',border:'1px solid rgba(240,180,41,.12)'}}>
+                      {card.status === 'completed' && card.image ? (
+                        <div style={{aspectRatio:'1/1',overflow:'hidden'}}>
+                          <img src={IMG(card.image.image_url||card.image.url)} alt="generated" style={{width:'100%',height:'100%',objectFit:'contain'}} />
+                        </div>
+                      ) : card.status === 'failed' ? (
+                        <div style={{aspectRatio:'1/1',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,padding:12,textAlign:'center'}}>
+                          <p style={{fontSize:12,color:'#fca5a5'}}>Image generation failed</p>
+                          <button onClick={generate} className="btn btn-outline" style={{padding:'5px 10px',fontSize:11}}>Retry</button>
+                        </div>
+                      ) : (
+                        <div style={{aspectRatio:'1/1',padding:10}}>
+                          <div style={{width:'100%',height:'100%',borderRadius:8,background:'linear-gradient(110deg, rgba(240,180,41,0.12) 30%, rgba(240,180,41,0.28) 45%, rgba(240,180,41,0.12) 60%)',backgroundSize:'220% 100%',animation:'cvShimmerItems 1.2s ease-in-out infinite'}} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : results.length>0 ? (
+            )}
+
+            {results.length>0 ? (
               <>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:24}}>
                   {results.map((img,i)=>(
@@ -311,11 +437,12 @@ export default function ItemsStudio() {
               <button onClick={()=>setStep(1)} disabled={!itemType} className="btn-gold">Next <ArrowRight size={14}/></button>
             ) : (
               <button onClick={generate} disabled={generating||!items.some(x=>x.file)} className="btn-gold">
-                {generating?<><div style={{width:14,height:14,border:'2px solid rgba(0,0,0,.3)',borderTopColor:'#000',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>Generating...</>:<><Wand2 size={14}/>Generate</>}
+                <><Wand2 size={14}/>Generate</>
               </button>
             )}
           </div>
         )}
+        <style>{`@keyframes cvShimmerItems{0%{background-position:200% 0}100%{background-position:-40% 0}}`}</style>
         </div>
       </div>
     </Layout>

@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api, { getImageUrl } from '../../utils/api';
+import { getJobErrorMessage, resolveJobResponse } from '../../utils/jobs';
 
 function Box({ label, sublabel, accent, preview, onFile, onRemove, required }) {
   const onDrop = useCallback((files) => {
@@ -88,14 +89,34 @@ export default function LabelCreator() {
   const [tagline, setTagline] = useState('');
   const [details, setDetails] = useState('');
 
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [result, setResult] = useState(null);
+  const pollAbortRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
 
   const onGenerate = async () => {
+    if (isGenerating) return;
     if (!productFile) return toast.error('Upload product image first');
 
+    const signal = startPollingSignal();
+
     setGenerating(true);
-    setResult(null);
+    setJobStatus('pending');
 
     try {
       const formData = new FormData();
@@ -111,11 +132,36 @@ export default function LabelCreator() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      setResult(response.data);
-      toast.success(`Label generated. Used ${response.data.credits_used} credits.`);
+      const settled = await resolveJobResponse(response.data, {
+        onStatusChange: (status) => setJobStatus(status),
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        toast.error(getJobErrorMessage(settled, 'Label generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      if (!payload.image_url) {
+        setJobStatus('failed');
+        toast.error('Generation finished but no label image was returned. Please retry.');
+        return;
+      }
+
+      setResult(payload);
+      setJobStatus('completed');
+      toast.success(`Label generated.${payload.credits_used ? ` Used ${payload.credits_used} credits.` : ''}`);
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
       toast.error(err.response?.data?.error || 'Label generation failed');
     } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
       setGenerating(false);
     }
   };
@@ -208,7 +254,9 @@ export default function LabelCreator() {
           <textarea className="cv-input" value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Additional text (material, variant, offer, etc.)" style={{ resize: 'none', minHeight: 74 }} />
 
           <button className="btn-primary" onClick={onGenerate} disabled={generating || !productFile} style={{ width: '100%', justifyContent: 'center' }}>
-            {generating ? 'Generating...' : <><Wand2 size={14} />Generate Label (2 credits)</>}
+            {generating
+              ? (jobStatus === 'pending' ? 'Queued for generation...' : 'Generating...')
+              : <><Wand2 size={14} />Generate Label (2 credits)</>}
           </button>
         </div>
 

@@ -2,6 +2,15 @@ import app, { initializeApp } from './app.js';
 
 const PORT = process.env.PORT || 5000;
 
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err?.message || err);
+  if (err?.stack) console.error(err.stack);
+});
+
 const startServer = async () => {
   await initializeApp();
   app.listen(PORT, () => {

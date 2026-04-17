@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, Plus, X, Sparkles, RefreshCw, Copy, Check, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildUploadUrl } from '../../utils/uploads';
+import { getJobErrorMessage, getJobProgressImages, resolveJobResponse } from '../../utils/jobs';
 import Layout from '../../components/shared/Layout';
 
 /* ── ImageBox ── */
@@ -166,11 +167,17 @@ export default function SceneBuilder() {
   const [platform, setPlatform] = useState('flipkart');
 
   // Output
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [results, setResults] = useState([]);
+  const [pendingCards, setPendingCards] = useState([]);
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [copied, setCopied] = useState(false);
+  const pollAbortRef = useRef(null);
+  const generationRunRef = useRef(0);
 
   useEffect(() => {
     api.get('/scene/presets')
@@ -185,6 +192,12 @@ export default function SceneBuilder() {
           : 'Could not load live presets. Using local presets.';
         setPresetsError(message);
       });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
   }, []);
 
   const handleSurfaceChange = (id) => {
@@ -223,9 +236,59 @@ export default function SceneBuilder() {
     ? presets.prop_items
     : (presets?.prop_items?.[surfaceType] || presets?.prop_items?.custom || []);
 
+  const getGeneratingLabel = () => {
+    if (jobStatus === 'pending') return 'Queued...';
+    if (jobStatus === 'processing') return 'Building...';
+    return 'Building...';
+  };
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
+
+  const createPendingCards = (count) => {
+    const normalized = Math.max(1, Number(count) || 1);
+    generationRunRef.current += 1;
+    const runId = generationRunRef.current;
+    setPendingCards(Array.from({ length: normalized }, (_, index) => ({
+      id: `pending-${runId}-${index}`,
+      status: 'loading',
+      image: null,
+    })));
+    return runId;
+  };
+
+  const markPendingFailed = (runId) => {
+    setPendingCards((prev) => prev.map((card) => (
+      card.id.startsWith(`pending-${runId}-`) ? { ...card, status: 'failed' } : card
+    )));
+  };
+
+  const mergeProgressCards = (runId, incomingImages) => {
+    const normalizedImages = Array.isArray(incomingImages) ? incomingImages : [];
+    if (!normalizedImages.length || runId !== generationRunRef.current) return;
+
+    setPendingCards((prev) => prev.map((card, cardIndex) => {
+      if (!card.id.startsWith(`pending-${runId}-`)) return card;
+      const image = normalizedImages[cardIndex];
+      if (!image) return card;
+      return { ...card, status: 'completed', image };
+    }));
+  };
+
   const generate = async () => {
+    if (isGenerating) return;
     if (!productFile) return toast.error('Upload product image first');
-    setGenerating(true); setResults([]);
+    const runId = createPendingCards(1);
+    const signal = startPollingSignal();
+
+    setGenerating(true);
+    setJobStatus('pending');
+    setStep(3);
+
     try {
       const fd = new FormData();
       fd.append('product_image', productFile);
@@ -242,10 +305,43 @@ export default function SceneBuilder() {
       fd.append('custom_prompt', customPrompt);
       fd.append('platform', platform);
       const r = await api.post('/scene/generate', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setResults(r.data.images || []);
-      setStep(3);
-      toast.success(`Scene generated! Used ${r.data.credits_used} credits.`);   
+
+      const settled = await resolveJobResponse(r.data, {
+        onStatusChange: (status, snapshot) => {
+          setJobStatus(status);
+          mergeProgressCards(runId, getJobProgressImages(snapshot));
+        },
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error(getJobErrorMessage(settled, 'Generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      const images = Array.isArray(payload.images) ? payload.images : [];
+      if (!images.length) {
+        setJobStatus('failed');
+        markPendingFailed(runId);
+        toast.error('Generation finished but no scene images were returned. Please retry.');
+        return;
+      }
+
+      mergeProgressCards(runId, images);
+      setPendingCards([]);
+      setResults(images);
+      setJobStatus('completed');
+      toast.success(`Scene generated!${payload.credits_used ? ` Used ${payload.credits_used} credits.` : ''}`);   
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
+      markPendingFailed(runId);
       if (err.response?.data?.error === 'Insufficient credits') {
         toast.error('Not enough credits! Request more.');
       } else if (!err.response) {
@@ -253,7 +349,10 @@ export default function SceneBuilder() {
       } else {
         toast.error(err.response?.data?.error || 'Generation failed');
       }
-    } finally { setGenerating(false); }
+    } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
+      setGenerating(false);
+    }
   };
 
   const download = (url) => {
@@ -465,13 +564,39 @@ export default function SceneBuilder() {
         {/* STEP 3 — Results */}
         {step === 3 && (
           <div style={{ animation: 'fadeUp .4s ease' }}>
-            {generating ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px' }}>       
-                <div style={{ width: 64, height: 64, borderRadius: '50%', border: '3px solid rgba(240,180,41,.2)', borderTopColor: '#f0b429', animation: 'spin .8s linear infinite', margin: '0 auto 20px' }} />
-                <p style={{ fontFamily: 'Syne,sans-serif', fontWeight: 600, color: '#fff', fontSize: '1.1rem', marginBottom: 8 }}>Building your product scene...</p>
-                <p style={{ color: 'rgba(162,140,250,.4)', fontSize: '.85rem' }}>Product details preserved exactly</p>
+            {pendingCards.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+                  <p style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, color: '#fff' }}>
+                    {jobStatus === 'pending' ? 'Your job is queued' : 'Building your new scene'}
+                  </p>
+                  <p style={{ fontSize: 12, color: '#f0b429' }}>{getGeneratingLabel()}</p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14 }}>
+                  {pendingCards.map((card) => (
+                    <div key={card.id} style={{ borderRadius: 14, overflow: 'hidden', background: 'rgba(240,180,41,.04)', border: '1px solid rgba(240,180,41,.12)' }}>
+                      {card.status === 'completed' && card.image ? (
+                        <div style={{ aspectRatio: outputFormat === 'story' ? '9/16' : outputFormat === 'banner' ? '16/9' : '1/1', overflow: 'hidden', background: '#111' }}>
+                          <img src={buildUploadUrl(card.image.url)} alt="generated scene" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      ) : card.status === 'failed' ? (
+                        <div style={{ aspectRatio: '1/1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, textAlign: 'center' }}>
+                          <p style={{ fontSize: 12, color: '#fca5a5' }}>Scene generation failed</p>
+                          <button onClick={generate} className="btn btn-outline" style={{ padding: '5px 10px', fontSize: 11 }}>Retry</button>
+                        </div>
+                      ) : (
+                        <div style={{ aspectRatio: outputFormat === 'story' ? '9/16' : outputFormat === 'banner' ? '16/9' : '1/1', padding: 10 }}>
+                          <div style={{ width: '100%', height: '100%', borderRadius: 8, background: 'linear-gradient(110deg, rgba(240,180,41,0.10) 30%, rgba(240,180,41,0.24) 45%, rgba(240,180,41,0.10) 60%)', backgroundSize: '220% 100%', animation: 'cvShimmerScene 1.2s ease-in-out infinite' }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : results.length > 0 ? (
+            )}
+
+            {results.length > 0 ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 10, flexWrap: 'wrap' }}>
                   <h2 style={{ fontFamily: 'Syne,sans-serif', fontWeight: 700, color: '#fff' }}>✨ Your Scenes ({results.length})</h2>
@@ -526,15 +651,13 @@ export default function SceneBuilder() {
               </button>
             ) : (
               <button onClick={generate} disabled={generating || !productFile} className="btn-gold">
-                {generating
-                  ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(0,0,0,.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />Building...</>
-                  : <><Wand2 size={14} />Build Scene (2 credits)</>}
+                <><Wand2 size={14} />Build Scene (2 credits)</>
               </button>
             )}
           </div>
         )}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} @media(max-width:560px){.scene-platform-row{margin-bottom:12px!important}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} @keyframes cvShimmerScene{0%{background-position:200% 0}100%{background-position:-40% 0}} @media(max-width:560px){.scene-platform-row{margin-bottom:12px!important}}`}</style>
     </div>
     </Layout>
   );

@@ -19,6 +19,7 @@ import {
   setAdminPrompts
 } from '../services/geminiAgents.js';
 import { uploadToCloudinary, uploadFileToCloudinary, isCloudinaryEnabled } from '../services/cloudinaryService.js';
+import { createJob } from '../services/jobService.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -297,196 +298,103 @@ router.post('/', upload.single('product_image'), async (req, res) => {
 
 // Generate images with model
 router.post('/:id/generate', upload.single('model_image'), async (req, res) => {
-  const { angles, platform } = req.body;
-  const angleList = angles ? JSON.parse(angles) : ['front', 'back', 'left_side', 'right_side'];
-  let productId = null;
-  let movedToProcessing = false;
-  const taskId = uuidv4();
-  
   try {
-    await loadAdminPrompts();
-    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
-    if (!products.length) return res.status(404).json({ error: 'Product not found' });
-    const product = products[0];
-    productId = product.id;
-    
     if (!req.file) return res.status(400).json({ error: 'Model image required' });
-    
-    const costs = await getCreditCosts(req.user.id);
-    const totalCredits = angleList.length * costs.credits_per_image;
-    await ensureCreditsAvailable(req.user.id, totalCredits);
 
-    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', product.id]);
-    movedToProcessing = true;
-    
-    const results = [];
-    const generationErrors = [];
-    for (const [index, angle] of angleList.entries()) {
+    const { rows: products } = await query('SELECT id FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    if (!products.length) return res.status(404).json({ error: 'Product not found' });
+
+    const angleList = (() => {
+      const rawAngles = req.body.angles;
+      if (Array.isArray(rawAngles) && rawAngles.length) return rawAngles;
+      if (!rawAngles) return ['front', 'back', 'left_side', 'right_side'];
       try {
-        const result = await generateTryOn(req.file.path, product.original_image, product, angle, {
-          poseVariant: index,
-          customPromptExtra: req.body.custom_prompt_extra || ''
-        });
-        if (result.success) {
-          const imageBuffer = Buffer.from(result.imageData, 'base64');
-          const savedUrl = await saveImage(imageBuffer, req.user.id, `gen_${uuidv4()}.jpg`);
-
-          const { rows } = await query(
-            'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-            [
-              product.id,
-              req.user.id,
-              'tryon',
-              angle,
-              savedUrl,
-              platform || 'general',
-              costs.credits_per_image,
-              JSON.stringify({ task_id: taskId, task_kind: 'tryon', angle, pose: result.pose || null })
-            ]
-          );
-          results.push(rows[0]);
-        } else {
-          generationErrors.push(`${angle}: ${result.error || 'No image generated'}`);
-        }
-      } catch (err) {
-        if (!results.length && err.code) throw err;
-        generationErrors.push(`${angle}: ${err.message}`);
+        const parsed = JSON.parse(rawAngles);
+        return Array.isArray(parsed) && parsed.length ? parsed : ['front', 'back', 'left_side', 'right_side'];
+      } catch {
+        return ['front', 'back', 'left_side', 'right_side'];
       }
-    }
+    })();
 
-    if (!results.length) throw new Error(generationErrors[0] || 'Image generation failed');
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', req.params.id]);
 
-    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', product.id]);
+    const storedModelImage = await saveUploadedFile(req.file.path, req.user.id);
 
-    const actualCredits = results.length * costs.credits_per_image;
-    await useCredits(req.user.id, actualCredits);
-    
-    await query(
-      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
-      [
-        req.user.id,
-        'use',
-        actualCredits,
-        `Generated ${results.length} try-on images for "${product.name}" (${costs.credits_per_image}/image = ${actualCredits})`
-      ]
-    );
-    
-    res.json({
-      success: true,
-      images: results,
-      task_id: taskId,
-      credits_used: actualCredits,
-      credits_per_image: costs.credits_per_image,
-      generated_count: results.length,
-      generation_errors: generationErrors
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'products_generate',
+        productId: req.params.id,
+        modelImagePath: storedModelImage,
+        angles: angleList,
+        platform: req.body.platform || 'general',
+        customPromptExtra: req.body.custom_prompt_extra || ''
+      }
     });
+
+    console.log(`[jobs] created job=${job.id} type=image op=products_generate user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    if (productId && movedToProcessing) {
-      try { await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]); } catch {}
-    }
-    res.status(getErrorStatusCode(err)).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
 // Generate 360 set for an existing product (front/left/back/right)
 router.post('/:id/generate-360', upload.single('model_image'), async (req, res) => {
-  const taskId = uuidv4();
   try {
-    await loadAdminPrompts();
-    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    const { rows: products } = await query('SELECT id FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
-    const product = products[0];
 
-    const costs = await getCreditCosts(req.user.id);
-    const totalCredits = 4 * costs.credits_per_image;
-    await ensureCreditsAvailable(req.user.id, totalCredits);
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', req.params.id]);
 
-    const results = await generate360View(product.original_image, req.file?.path || null, product, {
-      customPromptExtra: req.body.custom_prompt_extra || ''
+    const storedModelImage = req.file?.path ? await saveUploadedFile(req.file.path, req.user.id) : null;
+
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'products_generate_360',
+        productId: req.params.id,
+        modelImagePath: storedModelImage,
+        customPromptExtra: req.body.custom_prompt_extra || ''
+      }
     });
-    if (!results.length) throw new Error('360 generation failed');
 
-    const savedImages = [];
-    for (const r of results) {
-      const imageBuffer = Buffer.from(r.imageData, 'base64');
-      const savedUrl = await saveImage(imageBuffer, req.user.id, `360_${uuidv4()}.jpg`);
-
-      const { rows } = await query(
-        'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-        [
-          product.id,
-          req.user.id,
-          'view_360',
-          r.angle,
-          savedUrl,
-          costs.credits_per_image,
-          JSON.stringify({ task_id: taskId, task_kind: 'view_360', angle: r.angle })
-        ]
-      );
-      savedImages.push(rows[0]);
-    }
-
-    const actualCredits = savedImages.length * costs.credits_per_image;
-    await useCredits(req.user.id, actualCredits);
-    await query(
-      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
-      [req.user.id, 'use', actualCredits, `360 view: "${product.name}"`]
-    );
-
-    res.json({ success: true, images: savedImages, task_id: taskId, credits_used: actualCredits });
+    console.log(`[jobs] created job=${job.id} type=image op=products_generate_360 user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    res.status(getErrorStatusCode(err)).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
 // Generate 360 set directly from uploaded product image (without pre-created product)
 router.post('/generate-360-direct', upload.fields([{ name: 'product_image' }, { name: 'model_image' }]), async (req, res) => {
-  const taskId = uuidv4();
   try {
     if (!req.files?.product_image) return res.status(400).json({ error: 'Product image required' });
 
-    await loadAdminPrompts();
-
-    const costs = await getCreditCosts(req.user.id);
-    const totalCredits = 4 * costs.credits_per_image;
-    await ensureCreditsAvailable(req.user.id, totalCredits);
-
-    const productDetails = {
-      name: req.body.product_name || 'Product',
-      category: req.body.product_category || 'clothing',
-      color: req.body.product_color || ''
-    };
-
-    const productImagePath = req.files.product_image[0].path;
-    const modelImagePath = req.files?.model_image?.[0]?.path || null;
-    const results = await generate360View(productImagePath, modelImagePath, productDetails, {
-      customPromptExtra: req.body.custom_prompt_extra || ''
+    const productImagePath = await saveUploadedFile(req.files.product_image[0].path, req.user.id);
+    const modelImagePath = req.files?.model_image?.[0]?.path
+      ? await saveUploadedFile(req.files.model_image[0].path, req.user.id)
+      : null;
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'products_generate_360_direct',
+        productImagePath,
+        modelImagePath,
+        productName: req.body.product_name || 'Product',
+        productCategory: req.body.product_category || 'clothing',
+        productColor: req.body.product_color || '',
+        customPromptExtra: req.body.custom_prompt_extra || ''
+      }
     });
 
-    if (!results.length) throw new Error('360 generation failed');
-
-    const savedImages = [];
-    for (const r of results) {
-      const imageBuffer = Buffer.from(r.imageData, 'base64');
-      const savedUrl = await saveImage(imageBuffer, req.user.id, `360_${uuidv4()}.jpg`);
-      savedImages.push({ angle: r.angle, url: savedUrl });
-    }
-
-    const actualCredits = savedImages.length * costs.credits_per_image;
-    await useCredits(req.user.id, actualCredits);
-    await query(
-      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
-      [req.user.id, 'use', actualCredits, `360 direct: "${productDetails.name}"`]
-    );
-
-    await query(
-      'INSERT INTO video_generations (owner_id, video_type, script, frames, credits_used) VALUES ($1,$2,$3,$4,$5)',
-      [req.user.id, 'view_360', JSON.stringify({ task_id: taskId, source: 'direct' }), JSON.stringify(savedImages), actualCredits]
-    );
-
-    res.json({ success: true, images: savedImages, task_id: taskId, credits_used: actualCredits });
+    console.log(`[jobs] created job=${job.id} type=image op=products_generate_360_direct user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    res.status(getErrorStatusCode(err)).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
@@ -505,65 +413,28 @@ router.post('/:id/measure', async (req, res) => {
 
 // Generate without model (product BG)
 router.post('/:id/generate-bg', async (req, res) => {
-  const { bg_style } = req.body;
-  let productId = null;
-  let movedToProcessing = false;
-  const taskId = uuidv4();
   try {
-    await loadAdminPrompts();
-    const { rows: products } = await query('SELECT * FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
+    const { rows: products } = await query('SELECT id FROM products WHERE id=$1 AND owner_id=$2', [req.params.id, req.user.id]);
     if (!products.length) return res.status(404).json({ error: 'Product not found' });
-    const product = products[0];
-    productId = product.id;
-    
-    const costs = await getCreditCosts(req.user.id);
-    await ensureCreditsAvailable(req.user.id, costs.credits_per_image);
 
-    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', product.id]);
-    movedToProcessing = true;
-    
-    const result = await generateProductBG(product.original_image, product, bg_style || 'studio', {
-      customPromptExtra: req.body.custom_prompt_extra || '',
-      customBGDescription: req.body.custom_bg_description || ''
+    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['processing', req.params.id]);
+
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'products_generate_bg',
+        productId: req.params.id,
+        bgStyle: req.body.bg_style || 'studio',
+        customPromptExtra: req.body.custom_prompt_extra || '',
+        customBGDescription: req.body.custom_bg_description || ''
+      }
     });
-    if (!result.success) throw new Error('Image generation failed');
 
-    await useCredits(req.user.id, costs.credits_per_image);
-    
-    const imageBuffer = Buffer.from(result.imageData, 'base64');
-    const savedUrl = await saveImage(imageBuffer, req.user.id, `bg_${uuidv4()}.jpg`);
-    
-    const { rows } = await query(
-      'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [
-        product.id,
-        req.user.id,
-        'bg_only',
-        bg_style,
-        savedUrl,
-        costs.credits_per_image,
-        JSON.stringify({ task_id: taskId, task_kind: 'bg_only', bg_style: bg_style || 'studio' })
-      ]
-    );
-
-    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', product.id]);
-    
-    await query(
-      'INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)',
-      [
-        req.user.id,
-        'use',
-        costs.credits_per_image,
-        `BG generation for "${product.name}" (${costs.credits_per_image}/image)`
-      ]
-    );
-    
-    res.json({ success: true, image: rows[0], task_id: taskId, credits_used: costs.credits_per_image, credits_per_image: costs.credits_per_image });
+    console.log(`[jobs] created job=${job.id} type=image op=products_generate_bg user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    if (productId && movedToProcessing) {
-      try { await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]); } catch {}
-    }
-    res.status(getErrorStatusCode(err)).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
@@ -747,42 +618,28 @@ router.get('/:id/images', async (req, res) => {
 router.post('/customer-tryon', upload.fields([{ name: 'customer_photo' }, { name: 'product_photo' }]), async (req, res) => {
   try {
     if (!req.files?.customer_photo || !req.files?.product_photo) return res.status(400).json({ error: 'Both photos required' });
-    await loadAdminPrompts();
-    
-    const costs = await getCreditCosts(req.user.id);
-    await ensureCreditsAvailable(req.user.id, costs.tryon_credits);
-    
-    const { product_name, product_category, product_color } = req.body;
-    const productDetails = { name: product_name || 'Product', category: product_category || 'clothing', color: product_color };
-    
-    const results = await generateCustomerTryOn(
-      req.files.customer_photo[0].path,
-      req.files.product_photo[0].path,
-      productDetails,
-      { customPromptExtra: req.body.custom_prompt_extra || '' }
-    );
 
-    if (!results.length) throw new Error('No try-on images generated. Check Vertex AI quota/billing and retry.');
-    
-    const savedImages = [];
-    for (const r of results) {
-      const buf = Buffer.from(r.imageData, 'base64');
-      const savedUrl = await saveImage(buf, req.user.id, `ctryon_${uuidv4()}.jpg`);
-      savedImages.push({ angle: r.angle, url: savedUrl });
-    }
+    const customerPhotoPath = await saveUploadedFile(req.files.customer_photo[0].path, req.user.id);
+    const productPhotoPath = await saveUploadedFile(req.files.product_photo[0].path, req.user.id);
 
-    await useCredits(req.user.id, costs.tryon_credits);
-    
-    const { rows } = await query(
-      'INSERT INTO customer_tryon (owner_id, customer_photo, product_photo, result_images, credits_used) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [req.user.id, req.files.customer_photo[0].path, req.files.product_photo[0].path, JSON.stringify(savedImages), costs.tryon_credits]
-    );
-    
-    await query('INSERT INTO credit_transactions (owner_id, type, amount, description) VALUES ($1,$2,$3,$4)', [req.user.id, 'use', costs.tryon_credits, 'Customer try-on']);
-    
-    res.json({ success: true, images: savedImages, record: rows[0] });
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'products_customer_tryon',
+        customerPhotoPath,
+        productPhotoPath,
+        productName: req.body.product_name || 'Product',
+        productCategory: req.body.product_category || 'clothing',
+        productColor: req.body.product_color || '',
+        customPromptExtra: req.body.custom_prompt_extra || ''
+      }
+    });
+
+    console.log(`[jobs] created job=${job.id} type=image op=products_customer_tryon user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    res.status(getErrorStatusCode(err)).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
