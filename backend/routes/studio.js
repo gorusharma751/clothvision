@@ -13,6 +13,7 @@ import {
   isCloudinaryEnabled
 } from '../services/cloudinaryService.js';
 import { getClient, getImageModelName, getTextModelName, getVideoModelName } from '../services/genaiClient.js';
+import { createJob } from '../services/jobService.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -290,377 +291,52 @@ router.post('/video', upload.single('product_image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Product image is required' });
 
-    const creditsNeeded = 5;
-    await ensureCreditsAvailable(req.user.id, creditsNeeded);
+    const storedProductImage = await saveUploadedImage(req.file.path, req.user.id, 'uploads');
 
-    const brandName = String(req.body.brand_name || '').trim();
-    const productName = String(req.body.product_name || '').trim();
-    const platform = String(req.body.platform || 'instagram_reel').trim();
-    const duration = Number(req.body.duration || 15);
-    const tone = String(req.body.tone || 'premium').trim();
-    const objective = String(req.body.objective || 'sales').trim();
-    const callToAction = String(req.body.cta || 'Shop now').trim();
-
-    const genAI = getClient();
-    const sourceImageBase64 = toBase64(req.file.path);
-    const sourceImageMime = getMimeType(req.file.path);
-
-    const textModel = genAI.getGenerativeModel({ model: getTextModelName() });
-    const fallbackScript = {
-      hook: `Turn one ${productName || 'product'} photo into a high-converting short video.` ,
-      caption: `${brandName || 'Brand'} ${productName || 'product'} now available. ${callToAction}`,
-      hashtags: ['#ecommerce', '#productvideo', '#aicontent'],
-      motion_prompt: `Cinematic vertical ad video for ${productName || 'product'} with smooth camera moves and premium lighting.`,
-      storyboard: [
-        {
-          scene: 'Hook shot',
-          visual: 'Close-up hero shot of product with dynamic light',
-          text_overlay: `${brandName || 'Brand'} presents`,
-          voiceover: `Meet the new ${productName || 'product'}.`,
-          duration_sec: 4
-        },
-        {
-          scene: 'Feature shot',
-          visual: 'Highlight key material/quality details',
-          text_overlay: 'Built for quality',
-          voiceover: 'Designed for quality, style, and everyday use.',
-          duration_sec: 5
-        },
-        {
-          scene: 'CTA shot',
-          visual: 'Product centered with clean background and motion',
-          text_overlay: callToAction,
-          voiceover: callToAction,
-          duration_sec: Math.max(3, duration - 9)
-        }
-      ]
-    };
-
-    const prompt = `You are a short-form video ad strategist.
-Generate a commercial script for ${platform}.
-
-Brand: ${brandName || 'Brand'}
-Product: ${productName || 'Product'}
-Duration: ${duration} seconds
-Tone: ${tone}
-Objective: ${objective}
-Call to action: ${callToAction}
-
-Return ONLY valid JSON with this exact schema:
-{
-  "hook": "string",
-  "caption": "string",
-  "hashtags": ["#tag1", "#tag2", "#tag3"],
-  "motion_prompt": "single complete prompt for AI video generation",
-  "storyboard": [
-    {
-      "scene": "short title",
-      "visual": "camera + composition instruction",
-      "text_overlay": "short overlay",
-      "voiceover": "spoken line",
-      "duration_sec": 3
-    }
-  ]
-}
-
-Rules:
-- storyboard should have 3 to 5 scenes.
-- Keep language concise, high-converting, and platform-ready.
-- Duration should approximately total ${duration} seconds.`;
-
-    const scriptResult = await textModel.generateContent(prompt);
-    let script = safeParseJson(scriptResult?.response?.text?.(), fallbackScript);
-
-    if (!Array.isArray(script.storyboard) || !script.storyboard.length) {
-      script.storyboard = fallbackScript.storyboard;
-    }
-    if (!Array.isArray(script.hashtags) || !script.hashtags.length) {
-      script.hashtags = fallbackScript.hashtags;
-    }
-    script.motion_prompt = String(script.motion_prompt || fallbackScript.motion_prompt || '').trim();
-
-    script.storyboard = script.storyboard.slice(0, 5).map((scene, idx) => ({
-      scene: String(scene.scene || `Scene ${idx + 1}`),
-      visual: String(scene.visual || 'Product-focused cinematic frame'),
-      text_overlay: String(scene.text_overlay || ''),
-      voiceover: String(scene.voiceover || ''),
-      duration_sec: Number(scene.duration_sec || 3)
-    }));
-
-    const imageModel = genAI.getGenerativeModel({ model: getImageModelName() });
-    const frameTargets = script.storyboard.slice(0, 3);
-    const frameResults = [];
-
-    for (let i = 0; i < frameTargets.length; i += 1) {
-      const scene = frameTargets[i];
-      try {
-        const framePrompt = `Create a cinematic keyframe for a short product video ad.
-
-Product: ${productName || 'Product'}
-Brand: ${brandName || 'Brand'}
-Scene: ${scene.scene}
-Visual instruction: ${scene.visual}
-Text overlay to leave readable area for: ${scene.text_overlay || callToAction}
-
-Requirements:
-1. Keep product shape/design/colors exactly consistent with source image.
-2. Make frame high-contrast and ad-ready.
-3. No watermark.
-4. Photorealistic quality.`;
-
-        const frameContent = [
-          {
-            inlineData: {
-              data: sourceImageBase64,
-              mimeType: sourceImageMime
-            }
-          },
-          { text: framePrompt }
-        ];
-
-        const frameOutput = await imageModel.generateContent(frameContent);
-        const generatedFrame = extractGeneratedImage(frameOutput);
-        if (!generatedFrame) continue;
-
-        const frameBuffer = Buffer.from(generatedFrame.data, 'base64');
-        const frameUrl = await saveGeneratedImage(frameBuffer, req.user.id, `video_frame_${uuidv4()}.jpg`, 'videos');
-        frameResults.push({
-          index: i,
-          scene: scene.scene,
-          text_overlay: scene.text_overlay,
-          url: frameUrl
-        });
-      } catch (frameErr) {
-        console.error('Video frame generation skipped:', frameErr.message);
-      }
-    }
-
-    const videoModel = getVideoModelName();
-    const aiDurationSec = normalizeVideoDurationSec(duration);
-    const aiVideoPrompt = script.motion_prompt || buildAiVideoPrompt({
-      script,
-      brandName,
-      productName,
-      tone,
-      objective,
-      callToAction,
-      platform
-    });
-
-    let operation = await genAI.generateVideos({
-      model: videoModel,
-      source: {
-        prompt: aiVideoPrompt,
-        image: {
-          imageBytes: sourceImageBase64,
-          mimeType: sourceImageMime
-        }
-      },
-      config: {
-        numberOfVideos: 1,
-        durationSeconds: aiDurationSec,
-        aspectRatio: getVideoAspectRatio(platform),
-        enhancePrompt: true,
-        generateAudio: false
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'video',
+      input: {
+        operation: 'studio_video',
+        productImagePath: storedProductImage,
+        brandName: req.body.brand_name || '',
+        productName: req.body.product_name || '',
+        platform: req.body.platform || 'instagram_reel',
+        duration: Number(req.body.duration || 15),
+        tone: req.body.tone || 'premium',
+        objective: req.body.objective || 'sales',
+        callToAction: req.body.cta || 'Shop now'
       }
     });
 
-    const pollIntervalMs = Math.max(3000, Number(process.env.VIDEO_POLL_INTERVAL_MS || 10000));
-    const timeoutMs = Math.max(60000, Number(process.env.VIDEO_GENERATION_TIMEOUT_MS || 480000));
-    const startedAt = Date.now();
-
-    while (!operation?.done) {
-      if (Date.now() - startedAt > timeoutMs) {
-        throw new Error('AI video generation timed out. Please retry after a minute.');
-      }
-      await sleep(pollIntervalMs);
-      operation = await genAI.getVideosOperation(operation);
-    }
-
-    if (operation?.error) {
-      const operationMessage = extractOperationErrorMessage(operation.error);
-      throw new Error(operationMessage ? `AI video generation failed: ${operationMessage}` : 'AI video generation failed.');
-    }
-
-    const generatedVideo = operation?.response?.generatedVideos?.[0]?.video;
-    let videoUrl = String(generatedVideo?.uri || '').trim();
-
-    if (!videoUrl && generatedVideo?.videoBytes) {
-      const videoBuffer = Buffer.from(generatedVideo.videoBytes, 'base64');
-      videoUrl = await saveGeneratedVideo(videoBuffer, req.user.id, `video_${uuidv4()}.mp4`, 'videos');
-    }
-
-    if (!videoUrl) {
-      throw new Error('AI video generation returned no playable video. Verify model access and billing, then retry.');
-    }
-
-    const remainingCredits = await useCredits(req.user.id, creditsNeeded);
-    await query(
-      'INSERT INTO credit_transactions (owner_id,type,amount,description) VALUES ($1,$2,$3,$4)',
-      [req.user.id, 'use', creditsNeeded, `Video Studio: ${productName || brandName || 'AI video generation'}`]
-    );
-
-    await query(
-      'INSERT INTO video_generations (owner_id, video_type, script, frames, credits_used) VALUES ($1,$2,$3,$4,$5)',
-      [
-        req.user.id,
-        platform,
-        JSON.stringify({
-          ...script,
-          source: 'video_studio',
-          tone,
-          objective,
-          cta: callToAction,
-          product_name: productName || null,
-          brand_name: brandName || null,
-          video_url: videoUrl,
-          video_model: videoModel,
-          ai_duration_sec: aiDurationSec,
-          operation_name: operation?.name || null
-        }),
-        JSON.stringify(frameResults),
-        creditsNeeded
-      ]
-    );
-
-    res.json({
-      success: true,
-      script,
-      frames: frameResults,
-      video_url: videoUrl,
-      video_model: videoModel,
-      ai_duration_sec: aiDurationSec,
-      credits_used: creditsNeeded,
-      remaining_credits: remainingCredits
-    });
+    console.log(`[jobs] created job=${job.id} type=video op=studio_video user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    res.status(getErrorStatusCode(err)).json({ error: err.message || 'Video generation failed' });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 
 router.post('/view360', upload.single('product_image'), async (req, res) => {
-  let productId = null;
-  let createdProduct = false;
-
   try {
     if (!req.file) return res.status(400).json({ error: 'Product image is required' });
 
-    const productName = String(req.body.product_name || 'Product').trim();
-    const productCategory = String(req.body.product_category || 'General').trim();
-    const productDescription = String(req.body.product_description || '').trim();
-
-    const creditsPerImage = await getPlanCreditsPerImage(req.user.id);
-    const angles = ['front', 'left_side', 'back', 'right_side'];
-    const maxCreditsNeeded = creditsPerImage * angles.length;
-
-    await ensureCreditsAvailable(req.user.id, maxCreditsNeeded);
-
-    const storedOriginalImage = await saveUploadedImage(req.file.path, req.user.id, 'uploads');
-    const { rows: createdRows } = await query(
-      'INSERT INTO products (owner_id, name, category, description, original_image, status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [req.user.id, productName, productCategory, productDescription, storedOriginalImage, 'processing']
-    );
-
-    productId = createdRows[0]?.id;
-    createdProduct = Boolean(productId);
-
-    const anglePrompt = {
-      front: 'front-facing centered view of the product',
-      left_side: 'left side profile view of the product',
-      back: 'back view of the product',
-      right_side: 'right side profile view of the product'
-    };
-
-    const imageModel = getClient().getGenerativeModel({ model: getImageModelName() });
-    const generatedImages = [];
-    const errors = [];
-
-    for (const angle of angles) {
-      try {
-        const prompt = `Create a professional e-commerce product image.
-
-Product name: ${productName}
-Category: ${productCategory}
-Requested angle: ${anglePrompt[angle]}
-
-Requirements:
-1. Keep product color, shape, branding, and texture exactly the same as source.
-2. Product only (no human model, no hand).
-3. Clean white/light neutral studio background.
-4. High-resolution, realistic catalog look.
-5. Maintain consistent framing across all angles.`;
-
-        const content = [
-          {
-            inlineData: {
-              data: toBase64(req.file.path),
-              mimeType: getMimeType(req.file.path)
-            }
-          },
-          { text: prompt }
-        ];
-
-        const result = await imageModel.generateContent(content);
-        const generated = extractGeneratedImage(result);
-        if (!generated) {
-          errors.push(`${angle}: no image output`);
-          continue;
-        }
-
-        const imageBuffer = Buffer.from(generated.data, 'base64');
-        const imageUrl = await saveGeneratedImage(imageBuffer, req.user.id, `view360_${angle}_${uuidv4()}.jpg`, 'view360');
-
-        const { rows } = await query(
-          'INSERT INTO generated_images (product_id, owner_id, image_type, angle, image_url, platform, credits_used, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-          [
-            productId,
-            req.user.id,
-            'view360',
-            angle,
-            imageUrl,
-            'viewer360',
-            creditsPerImage,
-            JSON.stringify({ task_kind: 'view360', angle })
-          ]
-        );
-
-        generatedImages.push(rows[0]);
-      } catch (angleErr) {
-        errors.push(`${angle}: ${angleErr.message}`);
+    const storedProductImage = await saveUploadedImage(req.file.path, req.user.id, 'uploads');
+    const job = await createJob({
+      userId: req.user.id,
+      type: 'image',
+      input: {
+        operation: 'studio_view360',
+        productImagePath: storedProductImage,
+        productName: req.body.product_name || 'Product',
+        productCategory: req.body.product_category || 'General',
+        productDescription: req.body.product_description || ''
       }
-    }
-
-    if (!generatedImages.length) {
-      throw new Error(errors[0] || '360 view generation failed');
-    }
-
-    const actualCreditsUsed = generatedImages.length * creditsPerImage;
-    await useCredits(req.user.id, actualCreditsUsed);
-    await query(
-      'INSERT INTO credit_transactions (owner_id,type,amount,description) VALUES ($1,$2,$3,$4)',
-      [req.user.id, 'use', actualCreditsUsed, `360 View: ${productName} (${generatedImages.length} angles)`]
-    );
-
-    await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['generated', productId]);
-
-    res.json({
-      success: true,
-      images: generatedImages,
-      credits_used: actualCreditsUsed,
-      credits_per_image: creditsPerImage,
-      generated_count: generatedImages.length,
-      generation_errors: errors,
-      partial: generatedImages.length < angles.length
     });
+
+    console.log(`[jobs] created job=${job.id} type=image op=studio_view360 user=${req.user.id}`);
+    return res.status(202).json({ jobId: job.id, status: 'pending' });
   } catch (err) {
-    if (createdProduct && productId) {
-      try {
-        await query('UPDATE products SET status=$1, updated_at=NOW() WHERE id=$2', ['failed', productId]);
-      } catch {
-        // Ignore cleanup errors.
-      }
-    }
-    res.status(getErrorStatusCode(err)).json({ error: err.message || '360 view generation failed' });
+    return res.status(500).json({ error: err.message || 'Failed to create job' });
   }
 });
 

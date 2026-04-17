@@ -5,6 +5,7 @@ import { ArrowLeft, Wand2, Download, Copy, Check, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api, { getImageUrl } from '../../utils/api';
+import { getJobErrorMessage, resolveJobResponse } from '../../utils/jobs';
 import { useAuth } from '../../context/AuthContext';
 
 function UploadBox({ preview, onFile, onRemove }) {
@@ -76,7 +77,10 @@ export default function VideoStudio() {
   const [objective, setObjective] = useState('sales');
   const [cta, setCta] = useState('Shop now');
 
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [result, setResult] = useState(null);
   const [videoUrl, setVideoUrl] = useState(null);
   const [progressValue, setProgressValue] = useState(0);
@@ -85,6 +89,7 @@ export default function VideoStudio() {
 
   const progressTimerRef = useRef(null);
   const progressStartRef = useRef(0);
+  const pollAbortRef = useRef(null);
 
   const orderedScenes = useMemo(() => {
     const storyboard = result?.script?.storyboard;
@@ -152,15 +157,27 @@ export default function VideoStudio() {
   }, [clearProgressTicker, updateProgressByElapsed]);
 
   useEffect(() => {
-    return () => clearProgressTicker();
+    return () => {
+      clearProgressTicker();
+      pollAbortRef.current?.abort();
+    };
   }, [clearProgressTicker]);
 
+  const startPollingSignal = useCallback(() => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  }, []);
+
   const onGenerate = async () => {
+    if (isGenerating) return;
     if (!productFile) return toast.error('Upload product image first');
 
+    const signal = startPollingSignal();
+
     setGenerating(true);
-    setResult(null);
-    clearVideoUrl();
+    setJobStatus('pending');
     startProgressTicker();
 
     try {
@@ -179,21 +196,43 @@ export default function VideoStudio() {
         timeout: 600000
       });
 
-      setResult(response.data);
+      const settled = await resolveJobResponse(response.data, {
+        onStatusChange: (status) => setJobStatus(status),
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
 
-      const serverVideoUrl = resolveAssetUrl(response.data?.video_url);
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        setProgressLabel('Generation failed.');
+        toast.error(getJobErrorMessage(settled, 'Video generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      setResult(payload);
+
+      const serverVideoUrl = resolveAssetUrl(payload?.video_url);
       if (serverVideoUrl) {
         setVideoUrl(serverVideoUrl);
+        setJobStatus('completed');
         setProgressValue(100);
         setProgressLabel('AI video ready.');
-        toast.success(`AI video ready. Used ${response.data.credits_used} credits.`);
+        toast.success(`AI video ready.${payload.credits_used ? ` Used ${payload.credits_used} credits.` : ''}`);
         refreshUser?.().catch(() => {});
       } else {
+        setJobStatus('failed');
+        setProgressLabel('Generation finished but video is missing.');
         toast.error('AI model did not return a playable video URL. Please verify model access and retry.');
       }
     } catch (err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
       toast.error(err.response?.data?.error || 'Video generation failed');
     } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
       clearProgressTicker();
       setGenerating(false);
     }
@@ -292,7 +331,9 @@ export default function VideoStudio() {
           <input className="cv-input" value={cta} onChange={(e) => setCta(e.target.value)} placeholder="Call to action" />
 
           <button className="btn-primary" onClick={onGenerate} disabled={generating || !productFile} style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
-            {generating ? 'Generating AI video...' : <><Wand2 size={14} />Generate Complete AI Video (5 credits)</>}
+            {generating
+              ? (jobStatus === 'pending' ? 'Queued for generation...' : 'Generating AI video...')
+              : <><Wand2 size={14} />Generate Complete AI Video (5 credits)</>}
           </button>
 
           {generating && (
@@ -301,6 +342,9 @@ export default function VideoStudio() {
                 <p style={{ color: 'rgba(226,226,240,.9)', fontSize: 12, fontWeight: 600 }}>{progressLabel}</p>
                 <p style={{ color: '#a78bfa', fontSize: 12, fontWeight: 700 }}>{Math.round(progressValue)}%</p>
               </div>
+              <p style={{ color: 'rgba(162,140,250,.75)', fontSize: 11, marginBottom: 8 }}>
+                Status: {jobStatus === 'pending' ? 'Queued' : (jobStatus === 'processing' ? 'Processing' : 'Generating')}
+              </p>
               <div style={{ width: '100%', height: 8, borderRadius: 999, overflow: 'hidden', background: 'rgba(124,58,237,.18)' }}>
                 <div
                   style={{

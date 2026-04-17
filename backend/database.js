@@ -81,6 +81,7 @@ const pool = new Pool({
 });
 
 export const query = (text, params) => pool.query(text, params);
+export const getDbClient = () => pool.connect();
 
 export const initDB = async () => {
   let client;
@@ -146,6 +147,21 @@ export const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS jobs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        type VARCHAR(20) NOT NULL CHECK (type IN ('image', 'video')),
+        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+        input JSONB NOT NULL,
+        result JSONB,
+        error TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_jobs_status_created_at ON jobs(status, created_at);
+      CREATE INDEX IF NOT EXISTS idx_jobs_user_created_at ON jobs(user_id, created_at DESC);
 
       CREATE TABLE IF NOT EXISTS products (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

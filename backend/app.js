@@ -17,6 +17,8 @@ import generationsRoutes from './routes/generations.js';
 import studioRoutes from './routes/studio.js';
 import videoRoutes from './routes/video.js';
 import labelRoutes from './routes/label.js';
+import jobRoutes from './routes/job.js';
+import { startJobProcessor } from './services/jobProcessor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDirConfig = String(process.env.UPLOAD_DIR || './uploads').trim();
@@ -53,6 +55,7 @@ app.use('/api/generations', generationsRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/label', labelRoutes);
+app.use('/api/job', jobRoutes);
 
 // Serve uploaded images
 app.use('/uploads', (req, res, next) => {
@@ -99,6 +102,14 @@ export const initializeApp = async () => {
     appInitPromise = (async () => {
       await initDB();
       await createAdmin();
+
+      const jobsEnabledRaw = String(process.env.JOB_PROCESSOR_ENABLED || '').trim().toLowerCase();
+      const jobsEnabled = jobsEnabledRaw === '' ? true : jobsEnabledRaw !== 'false';
+      const isServerlessRuntime = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+      if (jobsEnabled && !isServerlessRuntime) {
+        startJobProcessor();
+      }
+
       appInitialized = true;
     })();
   }

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Save, RefreshCw, Plus, Trash2, Wand2, Info } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 import Layout from '../../components/shared/Layout';
 import api from '../../utils/api';
+import { getJobErrorMessage, resolveJobResponse } from '../../utils/jobs';
 
 const PROMPT_SECTIONS = [
   {
@@ -81,12 +82,16 @@ function DropBox({ preview, onFile, onRemove, label }) {
 export default function PromptSettings() {
   const [settings, setSettings] = useState({});
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [productFile, setProductFile] = useState(null);
   const [productPreview, setProductPreview] = useState(null);
   const [promptType, setPromptType] = useState('tryon');
   const [generatedPrompt, setGeneratedPrompt] = useState(null);
   const [productDetails, setProductDetails] = useState({ name:'', category:'', color:'', description:'' });
+  const pollAbortRef = useRef(null);
 
   useEffect(() => {
     api.get('/admin/prompt-settings/ai_prompts').then(r => {
@@ -95,6 +100,19 @@ export default function PromptSettings() {
       setSettings(s);
     }).catch(()=>{});
   }, []);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
 
   const save = async () => {
     setSaving(true);
@@ -113,9 +131,12 @@ export default function PromptSettings() {
   };
 
   const generateSuggestion = async () => {
+    if (isGenerating) return;
     if(!productFile) return toast.error('Upload a product image first');
     if(!productDetails.name) return toast.error('Enter product name');
-    setGenerating(true); setGeneratedPrompt(null);
+    const signal = startPollingSignal();
+
+    setGenerating(true); setJobStatus('pending');
     try {
       const fd = new FormData();
       fd.append('product_image', productFile);
@@ -123,10 +144,40 @@ export default function PromptSettings() {
       Object.entries(productDetails).forEach(([k,v]) => v && fd.append(k, v));
       // Use the direct generate-prompt endpoint with temporary product
       const r = await api.post('/products/generate-prompt-direct', fd, {headers:{'Content-Type':'multipart/form-data'}});
-      setGeneratedPrompt(r.data);
+
+      const settled = await resolveJobResponse(r.data, {
+        onStatusChange: (status) => setJobStatus(status),
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        toast.error(getJobErrorMessage(settled, 'Generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      if (!payload.main_prompt) {
+        setJobStatus('failed');
+        toast.error('Generation finished but no prompt was returned. Please retry.');
+        return;
+      }
+
+      setGeneratedPrompt(payload);
+      setJobStatus('completed');
       toast.success('AI prompt generated!');
-    } catch(err) { toast.error(err.response?.data?.error||'Generation failed'); }
-    finally { setGenerating(false); }
+    } catch(err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
+      toast.error(err.response?.data?.error||'Generation failed');
+    }
+    finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
+      setGenerating(false);
+    }
   };
 
   const applyToSection = (promptText, sectionKey) => {
@@ -213,7 +264,9 @@ export default function PromptSettings() {
             </div>
 
             <button onClick={generateSuggestion} disabled={generating||!productFile} className="btn-primary" style={{width:'100%',height:42,justifyContent:'center'}}>
-              {generating?<><div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>Analyzing product...</>:<><Wand2 size={14}/>Generate AI Prompt</>}
+              {generating
+                ? <><div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>{jobStatus === 'pending' ? 'Queued for generation...' : 'Analyzing product...'}</>
+                : <><Wand2 size={14}/>Generate AI Prompt</>}
             </button>
           </div>
 

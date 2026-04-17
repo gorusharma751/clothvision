@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, ArrowRight, X, Upload, User, Shuffle, Lock, Wand2, Download, Copy, Check, Plus, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
 import { buildUploadUrl } from '../../utils/uploads';
+import { getJobErrorMessage, getJobProgressImages, resolveJobResponse } from '../../utils/jobs';
 import Layout from '../../components/shared/Layout';
 
 /* ── tiny helpers ── */
@@ -108,10 +109,22 @@ export default function DressStudio() {
   const [color, setColor] = useState('');
   const [material, setMaterial] = useState('');
 
-  const [generating, setGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [jobStatus, setJobStatus] = useState('idle');
+  const generating = isGenerating;
+  const setGenerating = setIsGenerating;
   const [results, setResults] = useState([]);
+  const [pendingCards, setPendingCards] = useState([]);
   const [listingContent, setListingContent] = useState(null);
   const [listingPlatform, setListingPlatform] = useState('amazon');
+  const pollAbortRef = useRef(null);
+  const generationRunRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
 
   const addItem = () => setItems(prev => [...prev, { id: Date.now(), file:null, preview:null }]);
   const removeItem = id => setItems(prev => prev.filter(x => x.id !== id));
@@ -143,11 +156,62 @@ export default function DressStudio() {
     return msg || 'Generation failed. Please try again.';
   };
 
+  const getGeneratingLabel = () => {
+    if (jobStatus === 'pending') return 'Queued...';
+    if (jobStatus === 'processing') return 'Generating...';
+    return 'Generating...';
+  };
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
+
+  const createPendingCards = (count) => {
+    const normalized = Math.max(1, Number(count) || 1);
+    generationRunRef.current += 1;
+    const runId = generationRunRef.current;
+    setPendingCards(Array.from({ length: normalized }, (_, index) => ({
+      id: `pending-${runId}-${index}`,
+      status: 'loading',
+      image: null,
+    })));
+    return runId;
+  };
+
+  const markPendingFailed = (runId) => {
+    setPendingCards((prev) => prev.map((card) => (
+      card.id.startsWith(`pending-${runId}-`) ? { ...card, status: 'failed' } : card
+    )));
+  };
+
+  const mergeProgressCards = (runId, incomingImages) => {
+    const normalizedImages = Array.isArray(incomingImages) ? incomingImages : [];
+    if (!normalizedImages.length || runId !== generationRunRef.current) return;
+
+    setPendingCards((prev) => prev.map((card, cardIndex) => {
+      if (!card.id.startsWith(`pending-${runId}-`)) return card;
+      const image = normalizedImages[cardIndex];
+      if (!image) return card;
+      return { ...card, status: 'completed', image };
+    }));
+  };
+
   const generate = async () => {
+    if (isGenerating) return;
     const productFiles = items.filter(x=>x.file);
     if (!productFiles.length) return toast.error('Upload at least one product image');
     if (selectedAngles.length === 0) return toast.error('Select at least one angle');
-    setGenerating(true); setResults([]);
+    const expectedSlots = modelMode === 'without' ? 1 : Math.max(1, selectedAngles.length);
+    const runId = createPendingCards(expectedSlots);
+    const signal = startPollingSignal();
+
+    setGenerating(true);
+    setJobStatus('pending');
+    setStep(3);
+
     try {
       // First create product
       const fd = new FormData();
@@ -163,10 +227,43 @@ export default function DressStudio() {
       if (modelMode === 'without') {
         // BG only
         const r = await api.post(`/products/${productId}/generate-bg`, { bg_style: bgStyle.toLowerCase().replace(' ','_') });
-        if (r.data.image) setResults([{ angle:'product', url: r.data.image.image_url }]);
+        const settled = await resolveJobResponse(r.data, {
+          onStatusChange: (status, snapshot) => {
+            setJobStatus(status);
+            mergeProgressCards(runId, getJobProgressImages(snapshot));
+          },
+          intervalMs: 3000,
+          processingIntervalMs: 4500,
+          maxPollingRetries: 4,
+          signal,
+        });
+
+        if (settled.status === 'failed') {
+          setJobStatus('failed');
+          markPendingFailed(runId);
+          toast.error(getJobErrorMessage(settled, 'Background generation failed'));
+          return;
+        }
+
+        const payload = settled.result || {};
+        if (!payload.image?.image_url) {
+          setJobStatus('failed');
+          markPendingFailed(runId);
+          toast.error('Generation finished but no image was returned. Please retry.');
+          return;
+        }
+
+        const nextResults = [{ angle:'product', url: payload.image.image_url }];
+        mergeProgressCards(runId, nextResults);
+        setPendingCards([]);
+        setResults(nextResults);
       } else {
         // Try-on
-        if (!modelFile) return toast.error('Upload model photo');
+        if (!modelFile) {
+          setJobStatus('idle');
+          markPendingFailed(runId);
+          return toast.error('Upload model photo');
+        }
         const genFd = new FormData();
         genFd.append('model_image', modelFile);
         genFd.append('angles', JSON.stringify(selectedAngles));
@@ -175,13 +272,48 @@ export default function DressStudio() {
         if (bgFile) genFd.append('custom_bg', bgFile);
         if (logoFile) genFd.append('logo', logoFile);
         const r = await api.post(`/products/${productId}/generate`, genFd, { headers:{'Content-Type':'multipart/form-data'} });
-        setResults(r.data.images || []);
+        const settled = await resolveJobResponse(r.data, {
+          onStatusChange: (status, snapshot) => {
+            setJobStatus(status);
+            mergeProgressCards(runId, getJobProgressImages(snapshot));
+          },
+          intervalMs: 3000,
+          processingIntervalMs: 4500,
+          maxPollingRetries: 4,
+          signal,
+        });
+
+        if (settled.status === 'failed') {
+          setJobStatus('failed');
+          markPendingFailed(runId);
+          toast.error(getJobErrorMessage(settled, 'Image generation failed'));
+          return;
+        }
+
+        const payload = settled.result || {};
+        const images = Array.isArray(payload.images) ? payload.images : [];
+        if (!images.length) {
+          setJobStatus('failed');
+          markPendingFailed(runId);
+          toast.error('Generation finished but no images were returned. Please retry.');
+          return;
+        }
+
+        mergeProgressCards(runId, images);
+        setPendingCards([]);
+        setResults(images);
       }
-      setStep(3);
+      setJobStatus('completed');
       toast.success('Images generated!');
     } catch(err) {
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
+      markPendingFailed(runId);
       toast.error(getAiErrorMessage(err));
-    } finally { setGenerating(false); }
+    } finally {
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
+      setGenerating(false);
+    }
   };
 
   const generateListing = async () => {
@@ -400,13 +532,39 @@ export default function DressStudio() {
         {/* ── STEP 3: Results ── */}
         {step===3 && (
           <div className="animate-fade-up">
-            {generating ? (
-              <div style={{textAlign:'center',padding:'60px 20px'}}>
-                <div style={{width:64,height:64,borderRadius:'50%',border:'3px solid rgba(124,58,237,.2)',borderTopColor:'#7c3aed',animation:'spin .8s linear infinite',margin:'0 auto 20px'}}/>
-                <p style={{fontFamily:'Syne,sans-serif',fontWeight:600,color:'#fff',fontSize:'1.1rem',marginBottom:8}}>AI is generating your photos</p>
-                <p style={{color:'rgba(162,140,250,.4)',fontSize:'.85rem'}}>Face lock active — preserving model & product accurately...</p>
+            {pendingCards.length > 0 && (
+              <div style={{marginBottom:20}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,gap:8,flexWrap:'wrap'}}>
+                  <p style={{fontFamily:'Syne,sans-serif',fontWeight:700,color:'#fff'}}>
+                    {jobStatus === 'pending' ? 'Your job is queued' : 'Generating new images'}
+                  </p>
+                  <p style={{fontSize:12,color:'#a78bfa'}}>{getGeneratingLabel()}</p>
+                </div>
+
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12}}>
+                  {pendingCards.map((card) => (
+                    <div key={card.id} style={{borderRadius:14,overflow:'hidden',background:'rgba(124,58,237,.05)',border:'1px solid rgba(124,58,237,.1)'}}>
+                      {card.status === 'completed' && card.image ? (
+                        <div style={{aspectRatio:'3/4',overflow:'hidden'}}>
+                          <img src={IMG(card.image.image_url||card.image.url)} alt={card.image.angle || 'generated'} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                        </div>
+                      ) : card.status === 'failed' ? (
+                        <div style={{aspectRatio:'3/4',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,padding:12,textAlign:'center'}}>
+                          <p style={{fontSize:12,color:'#fca5a5'}}>Image generation failed</p>
+                          <button onClick={generate} className="btn btn-outline" style={{padding:'5px 10px',fontSize:11}}>Retry</button>
+                        </div>
+                      ) : (
+                        <div style={{aspectRatio:'3/4',padding:10}}>
+                          <div style={{width:'100%',height:'100%',borderRadius:8,background:'linear-gradient(110deg, rgba(124,58,237,0.10) 30%, rgba(124,58,237,0.24) 45%, rgba(124,58,237,0.10) 60%)',backgroundSize:'220% 100%',animation:'cvShimmerDress 1.2s ease-in-out infinite'}} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ) : results.length === 0 ? (
+            )}
+
+            {results.length === 0 ? (
               <div style={{textAlign:'center',padding:'40px 20px',color:'rgba(162,140,250,.4)'}}>
                 <p>No results yet</p>
                 <button onClick={generate} className="btn-primary" style={{marginTop:16}}><Wand2 size={16}/>Generate Now</button>
@@ -485,11 +643,12 @@ export default function DressStudio() {
               </button>
             ) : (
               <button onClick={generate} disabled={generating||!canGoNext()} className="btn-primary">
-                {generating ? <><div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>Generating...</> : <><Wand2 size={14}/>Generate ({selectedAngles.length} images)</>}
+                <><Wand2 size={14}/>Generate ({selectedAngles.length} images)</>
               </button>
             )}
           </div>
         )}
+        <style>{`@keyframes cvShimmerDress{0%{background-position:200% 0}100%{background-position:-40% 0}}`}</style>
         </div>
       </div>
     </Layout>

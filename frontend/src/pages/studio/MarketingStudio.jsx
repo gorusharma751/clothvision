@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { ArrowLeft, Wand2, Download, X, Plus, Copy, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getImageUrl } from '../../utils/api';
+import { getJobErrorMessage, resolveJobResponse } from '../../utils/jobs';
 import Layout from '../../components/shared/Layout';
 
 function DropBox({ preview, onFile, onRemove, label, sublabel, accent='#7c3aed', required }) {
@@ -54,12 +55,29 @@ export default function MarketingStudio() {
   const [extra,setExtra]=useState(''); const [pName,setPName]=useState('');
   const [price,setPrice]=useState(''); const [dPrice,setDPrice]=useState('');
   const [cta,setCta]=useState('Shop Now');
-  const [gen,setGen]=useState(false); const [result,setResult]=useState(null);
+  const [isGenerating,setIsGenerating]=useState(false); const [jobStatus,setJobStatus]=useState('idle'); const gen=isGenerating; const setGen=setIsGenerating; const [result,setResult]=useState(null);
   const [caption,setCaption]=useState(null); const [copied,setCopied]=useState(false);
+  const pollAbortRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  const startPollingSignal = () => {
+    pollAbortRef.current?.abort();
+    const controller = new AbortController();
+    pollAbortRef.current = controller;
+    return controller.signal;
+  };
 
   const generate = async () => {
+    if (isGenerating) return;
     if(!pFile) return toast.error('Upload product image');
-    setGen(true); setResult(null); setCaption(null);
+    const signal = startPollingSignal();
+
+    setGen(true); setJobStatus('pending');
     try {
       const fd=new FormData();
       fd.append('product_image',pFile);
@@ -70,13 +88,40 @@ export default function MarketingStudio() {
       fd.append('price',price); fd.append('discount_price',dPrice);
       fd.append('call_to_action',cta);
       const r=await api.post('/marketing/generate-poster',fd,{headers:{'Content-Type':'multipart/form-data'}});
-      setResult(r.data);
-      if(r.data.instagram_caption) setCaption(r.data.instagram_caption);
-      toast.success(`Poster ready! Used ${r.data.credits_used} credits.`);
+      const settled = await resolveJobResponse(r.data, {
+        onStatusChange: (status) => setJobStatus(status),
+        intervalMs: 3000,
+        processingIntervalMs: 4500,
+        maxPollingRetries: 4,
+        signal,
+      });
+
+      if (settled.status === 'failed') {
+        setJobStatus('failed');
+        toast.error(getJobErrorMessage(settled, 'Poster generation failed'));
+        return;
+      }
+
+      const payload = settled.result || {};
+      if (!payload.image_url) {
+        setJobStatus('failed');
+        toast.error('Generation finished but no poster image was returned. Please retry.');
+        return;
+      }
+
+      setResult(payload);
+      setJobStatus('completed');
+      if(payload.instagram_caption) setCaption(payload.instagram_caption);
+      toast.success(`Poster ready!${payload.credits_used ? ` Used ${payload.credits_used} credits.` : ''}`);
     } catch(err){
+      if (err?.name === 'AbortError') return;
+      setJobStatus('failed');
       if(err.response?.data?.error==='Insufficient credits') toast.error('Need 3 credits for poster');
       else toast.error(err.response?.data?.error||'Generation failed');
-    } finally{setGen(false);}
+    } finally{
+      if (pollAbortRef.current?.signal === signal) pollAbortRef.current = null;
+      setGen(false);
+    }
   };
 
   const download=()=>{if(!result?.image_url)return;const url=result.image_url.startsWith('http')?result.image_url:getImageUrl(result.image_url);const a=document.createElement('a');a.href=url;a.download=`poster_${size}_${Date.now()}.jpg`;a.click();};
@@ -154,7 +199,9 @@ export default function MarketingStudio() {
               </div>
             </div>
             <button onClick={generate} disabled={gen||!pFile} className="btn-primary" style={{width:'100%',height:46,justifyContent:'center'}}>
-              {gen?<><div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>Generating...</>:<><Wand2 size={14}/>Create Poster (3 credits)</>}
+              {gen
+                ? <><div style={{width:14,height:14,border:'2px solid rgba(255,255,255,.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>{jobStatus === 'pending' ? 'Queued for generation...' : 'Generating...'}</>
+                : <><Wand2 size={14}/>Create Poster (3 credits)</>}
             </button>
           </div>
         </div>
