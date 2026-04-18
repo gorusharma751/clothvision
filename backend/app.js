@@ -17,6 +17,8 @@ import generationsRoutes from './routes/generations.js';
 import studioRoutes from './routes/studio.js';
 import videoRoutes from './routes/video.js';
 import labelRoutes from './routes/label.js';
+import superAdminRoutes from './routes/superadmin.js';
+import adminPaymentRoutes from './routes/admin_payment.js';
 import jobRoutes from './routes/job.js';
 import { startJobProcessor } from './services/jobProcessor.js';
 
@@ -55,6 +57,8 @@ app.use('/api/generations', generationsRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/video', videoRoutes);
 app.use('/api/label', labelRoutes);
+app.use('/api/superadmin', superAdminRoutes);
+app.use('/api/admin-payment', adminPaymentRoutes);
 app.use('/api/job', jobRoutes);
 
 // Serve uploaded images
@@ -68,7 +72,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date() }
 
 const createAdmin = async () => {
   try {
-    const email = String(process.env.ADMIN_EMAIL || '').trim();
+    const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const password = String(process.env.ADMIN_PASSWORD || '').trim();
     if (!email || !password) {
       console.warn('Skipping admin bootstrap: ADMIN_EMAIL or ADMIN_PASSWORD is not set.');
@@ -77,16 +81,16 @@ const createAdmin = async () => {
     const { rows } = await query('SELECT id, role FROM users WHERE email=$1', [email]);
     if (!rows.length) {
       const hashed = await bcrypt.hash(password, 10);
-      await query('INSERT INTO users (email, password, name, role) VALUES ($1,$2,$3,$4)', [email, hashed, 'Super Admin', 'admin']);
-      console.log(`✅ Admin created: ${email}`);
+      await query('INSERT INTO users (email, password, name, role) VALUES ($1,$2,$3,$4)', [email, hashed, 'Super Admin', 'superadmin']);
+      console.log(`✅ Super admin created: ${email}`);
       return;
     }
 
     const existing = rows[0];
-    if (existing.role !== 'admin') {
+    if (existing.role !== 'superadmin') {
       const hashed = await bcrypt.hash(password, 10);
-      await query('UPDATE users SET role=$1, password=$2, updated_at=NOW() WHERE id=$3', ['admin', hashed, existing.id]);
-      console.log(`✅ Existing user promoted to admin: ${email}`);
+      await query('UPDATE users SET role=$1, password=$2, updated_at=NOW() WHERE id=$3', ['superadmin', hashed, existing.id]);
+      console.log(`✅ Existing user promoted to superadmin: ${email}`);
     }
   } catch (err) {
     console.error('Admin create error:', err.message);

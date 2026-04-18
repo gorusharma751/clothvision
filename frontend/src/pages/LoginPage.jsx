@@ -30,7 +30,13 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await login(normalizedEmail, normalizedPassword);
-      nav(user.role === 'admin' ? '/admin' : '/owner');
+      if (user.role === 'superadmin') {
+        nav('/super');
+      } else if (user.role === 'admin') {
+        nav('/admin');
+      } else {
+        nav('/owner');
+      }
     } catch (err) {
       const status = err?.response?.status;
       const backendError = err?.response?.data?.error;
@@ -96,7 +102,7 @@ export default function LoginPage() {
             </motion.button>
           </form>
           <p style={{textAlign:'center',fontSize:'0.78rem',color:'#8f8fb2',marginTop:'1rem'}}>
-            New owner?{' '}
+            New account?{' '}
             <Link to="/register" style={{color:'#a78bfa',textDecoration:'none',fontWeight:600}}>Create account</Link>
           </p>
           <p style={{textAlign:'center',fontSize:'0.7rem',color:'#6b6b8a',marginTop:'1.5rem'}}>Powered by Gemini AI</p>

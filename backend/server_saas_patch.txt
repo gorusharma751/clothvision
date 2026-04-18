@@ -1,0 +1,15 @@
+=== ADD TO backend/server.js ===
+
+// IMPORTS (add with other imports at top):
+import superadminRoutes from './routes/superadmin.js';
+import adminPaymentRoutes from './routes/admin_payment.js';
+
+// ROUTES (add with other app.use lines):
+app.use('/api/superadmin', superadminRoutes);
+app.use('/api/admin-payment', adminPaymentRoutes);
+
+// ALSO: Replace auth routes with the new auth_saas.js version
+// (rename auth_saas.js to auth.js)
+
+// Serve screenshots
+app.use('/uploads/screenshots', express.static('./uploads/screenshots'));

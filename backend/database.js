@@ -105,6 +105,9 @@ export const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id UUID REFERENCES users(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_admin_id ON users(admin_id);
+
       CREATE TABLE IF NOT EXISTS shops (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -147,6 +150,108 @@ export const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS saas_plans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(100) NOT NULL,
+        slug VARCHAR(50) UNIQUE NOT NULL,
+        description TEXT,
+        price_monthly DECIMAL(10,2) DEFAULT 0,
+        price_yearly DECIMAL(10,2) DEFAULT 0,
+        credits_monthly INTEGER DEFAULT 100,
+        max_users INTEGER DEFAULT 5,
+        max_products INTEGER DEFAULT 100,
+        features JSONB DEFAULT '[]',
+        is_active BOOLEAN DEFAULT true,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS price_monthly DECIMAL(10,2) DEFAULT 0;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS price_yearly DECIMAL(10,2) DEFAULT 0;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS credits_monthly INTEGER DEFAULT 100;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS max_users INTEGER DEFAULT 5;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS max_products INTEGER DEFAULT 100;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '[]';
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+      ALTER TABLE saas_plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+      CREATE TABLE IF NOT EXISTS admin_subscriptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        admin_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        plan_id UUID REFERENCES saas_plans(id),
+        status VARCHAR(20) DEFAULT 'trial',
+        billing_cycle VARCHAR(20) DEFAULT 'monthly',
+        started_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        auto_renew BOOLEAN DEFAULT false,
+        notes TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES saas_plans(id);
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'trial';
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) DEFAULT 'monthly';
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS started_at TIMESTAMP DEFAULT NOW();
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN DEFAULT false;
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE admin_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+      CREATE TABLE IF NOT EXISTS payment_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        type VARCHAR(30) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        currency VARCHAR(5) DEFAULT 'INR',
+        status VARCHAR(20) DEFAULT 'pending',
+        payment_method VARCHAR(50),
+        transaction_ref VARCHAR(200),
+        description TEXT,
+        plan_id UUID REFERENCES saas_plans(id),
+        credits_added INTEGER DEFAULT 0,
+        screenshot_url TEXT,
+        notes TEXT,
+        created_by UUID REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS currency VARCHAR(5) DEFAULT 'INR';
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS transaction_ref VARCHAR(200);
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS plan_id UUID REFERENCES saas_plans(id);
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS credits_added INTEGER DEFAULT 0;
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS screenshot_url TEXT;
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+
+      CREATE TABLE IF NOT EXISTS admin_feature_flags (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        feature_key VARCHAR(100) NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        value TEXT,
+        UNIQUE(admin_id, feature_key)
+      );
+
+      ALTER TABLE admin_feature_flags ADD COLUMN IF NOT EXISTS value TEXT;
+
+      CREATE TABLE IF NOT EXISTS super_admin_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        key VARCHAR(200) UNIQUE NOT NULL,
+        value TEXT,
+        category VARCHAR(100) DEFAULT 'general',
+        description TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      ALTER TABLE super_admin_settings ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'general';
+      ALTER TABLE super_admin_settings ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE super_admin_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
 
       CREATE TABLE IF NOT EXISTS jobs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -306,6 +411,33 @@ export const initDB = async () => {
         ('credits', 'scene_cost', '2', 'Credits for scene builder'),
         ('credits', 'view360_cost', '4', 'Credits for 360 view (4 images)')
       ON CONFLICT (category, key) DO NOTHING;
+
+      INSERT INTO saas_plans (name, slug, description, price_monthly, price_yearly, credits_monthly, max_users, max_products, features, sort_order)
+      VALUES
+        ('Starter', 'starter', 'For small shops', 999, 8999, 200, 2, 50, '["fashion_tryon","bg_generator","listing_content"]', 1),
+        ('Professional', 'professional', 'For growing brands', 2499, 22999, 800, 5, 500, '["fashion_tryon","bg_generator","scene_builder","listing_content","360_view","label_creator","video_studio"]', 2),
+        ('Business', 'business', 'For established sellers', 4999, 44999, 2500, 15, 2000, '["all_features","priority_support","customer_tryon","marketing_studio"]', 3),
+        ('Enterprise', 'enterprise', 'Custom for large teams', 0, 0, 10000, 100, 99999, '["all_features","dedicated_support","white_label","sla"]', 4)
+      ON CONFLICT (slug) DO NOTHING;
+
+      INSERT INTO super_admin_settings (key, value, category, description)
+      VALUES
+        ('platform_name', 'ClothVision AI', 'branding', 'Platform name'),
+        ('support_email', 'support@clothvision.ai', 'branding', 'Support email'),
+        ('trial_days', '7', 'subscription', 'Free trial days'),
+        ('trial_credits', '50', 'subscription', 'Trial credits'),
+        ('upi_id', '', 'payment', 'UPI ID'),
+        ('upi_name', '', 'payment', 'UPI account name'),
+        ('bank_name', '', 'payment', 'Bank name'),
+        ('account_number', '', 'payment', 'Account number'),
+        ('ifsc_code', '', 'payment', 'IFSC code'),
+        ('account_holder', '', 'payment', 'Account holder'),
+        ('razorpay_key_id', '', 'payment', 'Razorpay key ID'),
+        ('razorpay_key_secret', '', 'payment', 'Razorpay key secret'),
+        ('credit_cost_inr', '0.5', 'pricing', 'Cost per credit INR'),
+        ('min_credit_purchase', '100', 'pricing', 'Min credits purchase'),
+        ('gst_number', '', 'pricing', 'GST number')
+      ON CONFLICT (key) DO NOTHING;
     `);
     console.log('✅ Database initialized');
   } catch (err) {

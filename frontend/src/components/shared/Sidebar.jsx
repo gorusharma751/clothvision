@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight, Images, Globe, Megaphone, Home } from 'lucide-react';
+import { Sparkles, LayoutDashboard, Users, CreditCard, Settings, Package, Wand2, Coins, LogOut, Menu, X, ChevronLeft, ChevronRight, Images, Globe, Megaphone, Home, Crown } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const adminNav=[{to:'/admin',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/admin/owners',icon:Users,label:'Shop Owners'},{to:'/admin/credits',icon:CreditCard,label:'Credits'},{to:'/admin/settings',icon:Settings,label:'Settings'},{to:'/admin/prompts',icon:Wand2,label:'Prompt Settings'},{to:'/admin/landing',icon:Globe,label:'Landing Page'}];
+const superAdminNav=[{to:'/super',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/super/admins',icon:Users,label:'Admins'},{to:'/super/plans',icon:Crown,label:'Plans'},{to:'/super/payments',icon:CreditCard,label:'Payments'},{to:'/super/settings',icon:Settings,label:'Settings'},{to:'/admin',icon:Globe,label:'Admin View'}];
+const adminNav=[{to:'/admin',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/admin/owners',icon:Users,label:'Shop Owners'},{to:'/admin/credits',icon:CreditCard,label:'Credits'},{to:'/admin/subscription',icon:Crown,label:'Subscription'},{to:'/admin/settings',icon:Settings,label:'Settings'},{to:'/admin/prompts',icon:Wand2,label:'Prompt Settings'},{to:'/admin/landing',icon:Globe,label:'Landing Page'}];
 const ownerNav=[{to:'/',icon:Home,label:'Home',exact:true},{to:'/owner',icon:LayoutDashboard,label:'Dashboard',exact:true},{to:'/owner/studio',icon:Wand2,label:'AI Studio'},{to:'/owner/studio/marketing',icon:Megaphone,label:'Marketing Studio'},{to:'/owner/products',icon:Package,label:'Products'},{to:'/owner/generated',icon:Images,label:'Generated Gallery'},{to:'/owner/credits',icon:Coins,label:'Credits'}];
 const COLLAPSE_KEY = 'cv_sidebar_collapsed';
 
@@ -13,7 +14,7 @@ export default function Sidebar() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const items = user?.role==='admin' ? adminNav : ownerNav;
+  const items = user?.role==='superadmin' ? superAdminNav : user?.role==='admin' ? adminNav : ownerNav;
 
   useEffect(() => {
     try {
@@ -94,7 +95,7 @@ export default function Sidebar() {
                 </div>
               )}
             </div>
-            {user.role==='owner' && user.credits!=null && (
+            {user.role!=='superadmin' && user.credits!=null && (
               <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid rgba(124,58,237,.1)',display:'flex',justifyContent:showLabels?'space-between':'center',alignItems:'center',gap:8}}>
                 {showLabels && <span style={{fontSize:11,color:'rgba(162,140,250,.5)'}}>Credits</span>}
                 <span style={{fontSize:13,fontWeight:700,color:'#f0b429'}}>{user.credits}</span>
