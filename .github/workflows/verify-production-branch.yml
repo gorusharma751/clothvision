@@ -3,7 +3,7 @@ name: Verify Production Branch Only
 on:
   push:
     branches:
-      - '**'
+      - 'main'
 
       
 permissions:
