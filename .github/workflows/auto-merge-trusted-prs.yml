@@ -1,0 +1,119 @@
+name: Auto Merge Jaibhagwan PRs
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: jaibhagwan-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    # Only run for PRs targeting 'main' that are not drafts
+    if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required secret
+        env:
+          OWNER_TOKEN: ${{ secrets.OWNER_TOKEN }}
+        run: |
+          if [ -z "$OWNER_TOKEN" ]; then
+            echo "Error: OWNER_TOKEN secret is missing in GitHub Settings -> Secrets -> Actions."
+            exit 1
+          fi
+
+      - name: Check PR author is allowed
+        id: check-author
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.OWNER_TOKEN }}
+          script: |
+            const prAuthor = context.payload.pull_request.user.login.toLowerCase();
+            const allowedAuthors = ['jaibhagwanjindal'];
+
+            if (!allowedAuthors.includes(prAuthor)) {
+              core.notice(`Skipping: PR author @${prAuthor} is not in the allowed list.`);
+              core.setOutput('allowed', 'false');
+              return;
+            }
+
+            core.notice(`✅ PR author @${prAuthor} is allowed. Will merge as owner.`);
+            core.setOutput('allowed', 'true');
+            core.setOutput('pr_author', prAuthor);
+            core.setOutput('pr_number', context.payload.pull_request.number);
+            core.setOutput('head_sha', context.payload.pull_request.head.sha);
+            core.setOutput('head_ref', context.payload.pull_request.head.ref);
+
+      - name: Checkout repository as Owner
+        if: steps.check-author.outputs.allowed == 'true'
+        uses: actions/checkout@v4
+        with:
+          # Use OWNER_TOKEN so all git operations are authenticated as Gorusharma751
+          token: ${{ secrets.OWNER_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git identity as Owner (Gorusharma751)
+        if: steps.check-author.outputs.allowed == 'true'
+        run: |
+          # Fetch the owner's GitHub identity from the API using OWNER_TOKEN
+          OWNER_INFO=$(curl -s -H "Authorization: Bearer ${{ secrets.OWNER_TOKEN }}" \
+            https://api.github.com/user)
+          OWNER_LOGIN=$(echo "$OWNER_INFO" | jq -r '.login')
+          OWNER_ID=$(echo "$OWNER_INFO" | jq -r '.id')
+          # Use the no-reply email format that GitHub uses for web-based merges
+          OWNER_EMAIL="${OWNER_ID}+${OWNER_LOGIN}@users.noreply.github.com"
+
+          echo "Configuring git as: $OWNER_LOGIN <$OWNER_EMAIL>"
+          git config user.name "$OWNER_LOGIN"
+          git config user.email "$OWNER_EMAIL"
+
+      - name: Merge PR branch into main as Owner
+        if: steps.check-author.outputs.allowed == 'true'
+        env:
+          PR_NUMBER: ${{ steps.check-author.outputs.pr_number }}
+          PR_AUTHOR: ${{ steps.check-author.outputs.pr_author }}
+          HEAD_REF: ${{ steps.check-author.outputs.head_ref }}
+          HEAD_SHA: ${{ steps.check-author.outputs.head_sha }}
+        run: |
+          echo "Fetching PR branch: origin/$HEAD_REF"
+          git fetch origin "$HEAD_REF"
+
+          echo "Merging $HEAD_REF into main..."
+          git merge --no-ff -X theirs "origin/$HEAD_REF" \
+            -m "Auto-merge PR #${PR_NUMBER} from @${PR_AUTHOR}" \
+            -m "Automatically merged by @$(git config user.name) via GitHub Actions."
+
+          echo "Pushing main as owner..."
+          git push origin main
+
+          echo "✅ PR #${PR_NUMBER} successfully merged as owner."
+
+      - name: Close and comment PR via API
+        if: steps.check-author.outputs.allowed == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.OWNER_TOKEN }}
+          script: |
+            const pullNumber = parseInt('${{ steps.check-author.outputs.pr_number }}');
+            const prAuthor = '${{ steps.check-author.outputs.pr_author }}';
+
+            // The PR should be auto-closed by the push, but add a comment for clarity
+            try {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: pullNumber,
+                body: `✅ PR #${pullNumber} from @${prAuthor} was automatically merged into \`main\` by the repository owner via GitHub Actions.`
+              });
+            } catch (e) {
+              core.warning(`Could not comment on PR: ${e.message}`);
+            }

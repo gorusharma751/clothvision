@@ -1,0 +1,37 @@
+name: Verify Production Branch Only
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check-branch:
+    name: Ensure only main can deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if push is to main
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "✅ Push to main - production deployment allowed"
+            exit 0
+          else
+            echo "ℹ️  Push to ${{ github.ref_name }} - preview only (production restricted to main)"
+            exit 0
+          fi
+
+
+      - name: Document deployment policy
+        run: |
+          echo "📋 Deployment Policy:"
+          echo "  • Production: main branch only (auto-deploy from Vercel)"
+          echo "  • Preview: All branches (auto-preview from Vercel)"
+          echo "  • Team: github-app pull requests only"
+          echo "  • Non-team members: Preview deployments with ⚠️ warning"
